@@ -4,6 +4,7 @@ package.name = kartenwalzen
 package.domain = org.example
 source.dir = .
 source.include_exts = py,png,jpg,json
+source.exclude_dirs = hello,hello221,.github,bin,.buildozer
 version = 0.1
 requirements = python3,kivy==2.3.1
 orientation = portrait

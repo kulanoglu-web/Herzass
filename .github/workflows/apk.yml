@@ -11,6 +11,13 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: game,     dir: ".",      branch: apk-build,    cython: "3.0.11" }
+          - { name: hello,    dir: hello,    branch: apk-hello,    cython: "3.0.11" }
+          - { name: hello221, dir: hello221, branch: apk-hello221, cython: "0.29.36" }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,37 +34,37 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev \
             libltdl-dev build-essential git
           pip install --upgrade pip
-          pip install buildozer "cython==3.0.11" virtualenv setuptools
+          pip install buildozer "cython==${{ matrix.cython }}" virtualenv setuptools
       - name: APK (debug) bauen
         shell: bash
+        working-directory: ${{ matrix.dir }}
         run: buildozer -v android debug 2>&1 | tee build.log
-      - name: APK in Branch apk-build ablegen
+      - name: APK in Branch ablegen
         shell: bash
         run: |
-          mkdir -p /tmp/out && cp bin/*.apk /tmp/out/kartenwalzen.apk
+          mkdir -p /tmp/out && cp "${{ matrix.dir }}"/bin/*.apk /tmp/out/app.apk
           cd /tmp/out
-          git init -q -b apk-build
+          git init -q -b "${{ matrix.branch }}"
           git config user.name "github-actions"
           git config user.email "actions@users.noreply.github.com"
-          git add kartenwalzen.apk
-          git commit -q -m "APK aus Commit ${GITHUB_SHA}"
+          git add app.apk
+          git commit -q -m "APK ${{ matrix.name }} aus Commit ${GITHUB_SHA}"
           git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-          git push -f -q origin apk-build
+          git push -f -q origin "${{ matrix.branch }}"
       - name: Fehlerzusammenfassung
         if: failure()
         shell: bash
+        working-directory: ${{ matrix.dir }}
         run: |
-          echo "=== Fehlerzeilen ==="
           grep -n -E "ERROR|Error:|error:|FAILED|Traceback|Command failed|No matching|not found" build.log \
             | grep -v -E "won't be automatically|performance hint" | tail -25 | cut -c1-300
-          echo "=== Ende des Logs ==="
           tail -n 40 build.log | cut -c1-300
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: build-log
-          path: build.log
+          name: build-log-${{ matrix.name }}
+          path: ${{ matrix.dir }}/build.log
       - uses: actions/upload-artifact@v4
         with:
-          name: kartenwalzen-apk
-          path: bin/*.apk
+          name: apk-${{ matrix.name }}
+          path: ${{ matrix.dir }}/bin/*.apk
