@@ -8,6 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,11 +17,28 @@ jobs:
       - name: Abhaengigkeiten
         run: |
           sudo apt-get update
-          sudo apt-get install -y openjdk-17-jdk zip unzip autoconf libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev
-          pip install buildozer cython==0.29.36
+          sudo apt-get install -y openjdk-17-jdk zip unzip autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev libtinfo5 cmake libffi-dev libssl-dev \
+            libltdl-dev build-essential git
+          pip install --upgrade pip
+          pip install buildozer "cython==3.0.11" virtualenv setuptools
       - name: APK (debug) bauen
-        run: buildozer -v android debug
+        shell: bash
+        run: buildozer -v android debug 2>&1 | tee build.log
+      - name: Fehlerzusammenfassung
+        if: failure()
+        shell: bash
+        run: |
+          echo "=== Fehlerzeilen ==="
+          grep -n -E "ERROR|Error:|error:|FAILED|Traceback|Exception|Command failed|No matching|not found" build.log \
+            | grep -v "won't be automatically" | tail -40
+          echo "=== Ende des Logs ==="
+          tail -n 40 build.log | cut -c1-300
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: build.log
       - uses: actions/upload-artifact@v4
         with:
           name: kartenwalzen-apk
