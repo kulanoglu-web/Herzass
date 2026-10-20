@@ -9,6 +9,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -29,6 +31,18 @@ jobs:
       - name: APK (debug) bauen
         shell: bash
         run: buildozer -v android debug 2>&1 | tee build.log
+      - name: APK in Branch apk-build ablegen
+        shell: bash
+        run: |
+          mkdir -p /tmp/out && cp bin/*.apk /tmp/out/kartenwalzen.apk
+          cd /tmp/out
+          git init -q -b apk-build
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git add kartenwalzen.apk
+          git commit -q -m "APK aus Commit ${GITHUB_SHA}"
+          git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          git push -f -q origin apk-build
       - name: Fehlerzusammenfassung
         if: failure()
         shell: bash
