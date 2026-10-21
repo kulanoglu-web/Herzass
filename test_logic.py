@@ -55,8 +55,7 @@ class GameTest(unittest.TestCase):
 
     def test_risk_cells_fair(self):
         self.assertEqual(RISK_CELLS[0], 0)           # NULL links
-        self.assertEqual(RISK_CELLS[-1], 2)          # die andere Seite rechts
-        self.assertEqual(sorted(RISK_CELLS), RISK_CELLS)
+        self.assertEqual(RISK_CELLS[1], 2)           # im Wechsel NULL / echte Vermehrung
         self.assertAlmostEqual(sum(RISK_CELLS) / float(len(RISK_CELLS)), 1.0)
 
     def test_risk_null(self):
@@ -68,12 +67,12 @@ class GameTest(unittest.TestCase):
     def test_risk_mehr(self):
         g = Game(credit=100, stake=10)
         g.state, g.win = "result", 20
-        self.assertEqual(g.risk_resolve(4), 2)
+        self.assertEqual(g.risk_resolve(5), 2)
         self.assertEqual((g.win, g.state, g.rung), (40, "risk", 1))
 
     def test_risk_nicht_moeglich(self):
         g = Game()
-        self.assertIsNone(g.risk_resolve(4))
+        self.assertIsNone(g.risk_resolve(5))
         self.assertFalse(g.risk_start())
 
     def test_top_rung_pays_out(self):
