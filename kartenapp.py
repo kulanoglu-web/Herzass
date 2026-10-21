@@ -1,6 +1,6 @@
-"""Kartenwalzen - Walzen-Kartenspiel mit Halten, Ziehung und Risikoleiter.
+"""Kartenwalzen - Walzen-Kartenspiel mit Halten, Ziehung und Risiko "Null oder mehr".
 
-Eigenes Spiel mit eigener Grafik und eigenen, selbst erzeugten Klaengen.
+Eigenes Spiel.  Kartenbilder: Byron Knoll (gemeinfrei).  Klaenge selbst erzeugt.
 Nur Spielgeld, kein Echtgeld.  Oberflaeche: Kivy (Desktop und Android-APK).
 """
 import json
@@ -11,6 +11,7 @@ from kivy.animation import Animation
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.audio import SoundLoader
+from kivy.core.image import Image as CoreImage
 from kivy.core.text import Label as CoreLabel
 from kivy.core.window import Window
 from kivy.graphics import (Color, Ellipse, Line, Quad, Rectangle, RoundedRectangle,
@@ -23,15 +24,40 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
-from logic import (LADDER, PAYTABLE, RANK_LABEL, RANKS, SUITS, Game, is_red)
+from logic import LADDER, PAYTABLE, RANKS, SUITS, Game
 
+HERE = os.path.dirname(os.path.abspath(__file__))
 BG = (0.02, 0.03, 0.09, 1)
 GOLD = (0.95, 0.78, 0.25, 1)
 RED = (0.82, 0.10, 0.14, 1)
 INK = (0.08, 0.08, 0.10, 1)
-CARD_BG = (0.98, 0.97, 0.92, 1)
 
 Window.clearcolor = BG
+
+RANK_FILE = {7: "7", 8: "8", 9: "9", 10: "10", 11: "J", 12: "Q", 13: "K", 14: "A"}
+SUIT_FILE = {0: "H", 1: "D", 2: "S", 3: "C"}
+_textures = {}
+
+
+def card_texture(card):
+    """Texture der Kartenbild-Datei (gecacht); None, wenn sie nicht geladen werden kann."""
+    key = RANK_FILE[card[0]] + SUIT_FILE[card[1]]
+    if key not in _textures:
+        try:
+            _textures[key] = CoreImage(os.path.join(HERE, "cards", key + ".png")).texture
+        except Exception:
+            _textures[key] = None
+    return _textures[key]
+
+
+def image_texture(name):
+    key = "img:" + name
+    if key not in _textures:
+        try:
+            _textures[key] = CoreImage(os.path.join(HERE, "img", name)).texture
+        except Exception:
+            _textures[key] = None
+    return _textures[key]
 
 
 # ---------------------------------------------------------------- Helfer ----
@@ -43,22 +69,22 @@ def text_texture(text, size, color, bold=True):
 
 def draw_suit(suit, cx, cy, s):
     """Zeichnet ein Farbsymbol (0 Herz, 1 Karo, 2 Pik, 3 Kreuz) um (cx, cy), Groesse s."""
-    if suit == 0:      # Herz
+    if suit == 0:
         Ellipse(pos=(cx - s * 0.52, cy - s * 0.02), size=(s * 0.55, s * 0.55))
         Ellipse(pos=(cx - s * 0.03, cy - s * 0.02), size=(s * 0.55, s * 0.55))
         Triangle(points=[cx - s * 0.50, cy + s * 0.18, cx + s * 0.50, cy + s * 0.18,
                          cx, cy - s * 0.55])
-    elif suit == 1:    # Karo
+    elif suit == 1:
         Quad(points=[cx, cy + s * 0.58, cx + s * 0.40, cy, cx, cy - s * 0.58,
                      cx - s * 0.40, cy])
-    elif suit == 2:    # Pik
+    elif suit == 2:
         Ellipse(pos=(cx - s * 0.52, cy - s * 0.30), size=(s * 0.55, s * 0.55))
         Ellipse(pos=(cx - s * 0.03, cy - s * 0.30), size=(s * 0.55, s * 0.55))
         Triangle(points=[cx - s * 0.50, cy - s * 0.04, cx + s * 0.50, cy - s * 0.04,
                          cx, cy + s * 0.60])
         Triangle(points=[cx, cy - s * 0.1, cx - s * 0.18, cy - s * 0.58,
                          cx + s * 0.18, cy - s * 0.58])
-    else:              # Kreuz
+    else:
         r = s * 0.30
         Ellipse(pos=(cx - r, cy + s * 0.04), size=(2 * r, 2 * r))
         Ellipse(pos=(cx - r * 1.55, cy - s * 0.32), size=(2 * r, 2 * r))
@@ -71,7 +97,7 @@ class Sfx:
     """Spielt die mitgelieferten WAV-Effekte; faellt still aus, wenn kein Ton geht."""
 
     def __init__(self):
-        self.base = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sounds")
+        self.base = os.path.join(HERE, "sounds")
         self.sounds = {}
         self.on = True
 
@@ -84,9 +110,16 @@ class Sfx:
                 snd = SoundLoader.load(os.path.join(self.base, name + ".wav"))
                 self.sounds[name] = snd
             if snd:
-                snd.volume = volume
+                snd.volume = max(0.0, min(1.0, volume))
                 snd.stop()
                 snd.play()
+        except Exception:
+            pass
+
+    def stop(self, name):
+        try:
+            if self.sounds.get(name):
+                self.sounds[name].stop()
         except Exception:
             pass
 
@@ -118,16 +151,16 @@ class LedDisplay(Widget):
         w, h = self.size
         text = self.value[-self.digits:].rjust(self.digits)
         cw = w / self.digits
-        m = cw * 0.2
-        th = max(dp(2), cw * 0.10)
+        m = cw * 0.22
+        th = max(dp(1.8), cw * 0.10)
         g = th * 0.9
-        y0, y1 = y + h * 0.16, y + h * 0.84
+        y0, y1 = y + h * 0.17, y + h * 0.83
         ym = (y0 + y1) / 2
         with self.canvas:
-            Color(0.02, 0.0, 0.0, 1)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(4)])
+            Color(0.01, 0.0, 0.0, 1)
+            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(5)])
             Color(0.55, 0.42, 0.10, 1)
-            Line(rounded_rectangle=(x, y, w, h, dp(4)), width=dp(1))
+            Line(rounded_rectangle=(x, y, w, h, dp(5)), width=dp(1))
             for i, ch in enumerate(text):
                 x0, x1 = x + i * cw + m, x + (i + 1) * cw - m
                 segs = {
@@ -140,15 +173,15 @@ class LedDisplay(Widget):
                     if name in lit:
                         Color(1, 0.10, 0.05, 0.28)
                         Line(points=pts, width=th * 2.3, cap="round")
-                        Color(1, 0.28, 0.16, 1)
+                        Color(1, 0.30, 0.18, 1)
                     else:
-                        Color(0.24, 0.02, 0.02, 1)
+                        Color(0.14, 0.015, 0.015, 1)
                     Line(points=pts, width=th, cap="round")
 
 
 # ---------------------------------------------------------------- Karten ----
 class CardWidget(Widget):
-    """Eine Walze: zeigt eine Karte oder die Rueckseite."""
+    """Eine Walze: zeigt ein Kartenbild oder die Rueckseite."""
 
     def __init__(self, **kw):
         super().__init__(**kw)
@@ -164,95 +197,40 @@ class CardWidget(Widget):
 
     def redraw(self, *_):
         self.canvas.clear()
-        x, y = self.pos
-        w, h = self.size
         card = self.blur if self.spinning else self.card
-        with self.canvas:
-            if self.held:
-                Color(1, 0.85, 0.25, 0.35)
-                RoundedRectangle(pos=(x - dp(5), y - dp(5)),
-                                 size=(w + dp(10), h + dp(10)), radius=[dp(12)])
-            Color(*(GOLD if self.held else (0.0, 0.0, 0.0, 0.6)))
-            RoundedRectangle(pos=(x - dp(2.5), y - dp(2.5)),
-                             size=(w + dp(5), h + dp(5)), radius=[dp(10)])
-            if card is None:
-                Color(0.45, 0.08, 0.12, 1)
-                RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(8)])
-                Color(*GOLD)
-                Line(rounded_rectangle=(x + dp(6), y + dp(6), w - dp(12), h - dp(12),
-                                        dp(6)), width=dp(1.2))
-                draw_suit(0, x + w / 2, y + h / 2, w * 0.45)
-                return
-            Color(*CARD_BG)
-            RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(8)])
-            # leichter Glanz oben
-            Color(1, 1, 1, 0.25)
-            RoundedRectangle(pos=(x + dp(2), y + h * 0.55), size=(w - dp(4), h * 0.43),
-                             radius=[dp(7)])
-            rank, suit = card
-            Color(*(RED if is_red(card) else INK))
-            draw_suit(suit, x + w / 2, y + h * 0.40, w * 0.62)
-            tex = text_texture(RANK_LABEL[rank], sp(30), RED if is_red(card) else INK)
-            Color(1, 1, 1, 1)
-            Rectangle(texture=tex, size=tex.size,
-                      pos=(x + dp(6), y + h - tex.height - dp(4)))
-
-
-class RiskCard(Widget):
-    """Grosse Risikokarte: Rueckseite, rot/schwarz-Wechsel waehrend der Spannung, dann Aufdeckung."""
-
-    def __init__(self, **kw):
-        super().__init__(**kw)
-        self.mode = "back"
-        self.card = None
-        self.bind(pos=self.redraw, size=self.redraw)
-
-    def set_mode(self, mode, card=None):
-        self.mode, self.card = mode, card
-        self.redraw()
-
-    def redraw(self, *_):
-        self.canvas.clear()
-        cw = min(self.width, self.height * 0.70)
-        ch = cw / 0.70
+        ratio = 240.0 / 350.0
+        cw = min(self.width, self.height * ratio)
+        ch = cw / ratio
         x = self.x + (self.width - cw) / 2
         y = self.y + (self.height - ch) / 2
-        cx, cy = x + cw / 2, y + ch / 2
         with self.canvas:
-            Color(0, 0, 0, 0.55)
-            RoundedRectangle(pos=(x - dp(3), y - dp(3)), size=(cw + dp(6), ch + dp(6)),
-                             radius=[dp(12)])
-            if self.mode == "red":
-                Color(*RED)
-                RoundedRectangle(pos=(x, y), size=(cw, ch), radius=[dp(10)])
-                Color(1, 1, 1, 1)
-                draw_suit(0, cx, cy, cw * 0.62)
-            elif self.mode == "black":
-                Color(0.05, 0.05, 0.07, 1)
-                RoundedRectangle(pos=(x, y), size=(cw, ch), radius=[dp(10)])
-                Color(1, 1, 1, 1)
-                draw_suit(2, cx, cy, cw * 0.62)
-            elif self.mode == "face" and self.card:
-                Color(*CARD_BG)
-                RoundedRectangle(pos=(x, y), size=(cw, ch), radius=[dp(10)])
-                col = RED if is_red(self.card) else INK
-                Color(*col)
-                draw_suit(self.card[1], cx, cy - ch * 0.04, cw * 0.62)
-                tex = text_texture(RANK_LABEL[self.card[0]], sp(26), col)
-                Color(1, 1, 1, 1)
-                Rectangle(texture=tex, size=tex.size,
-                          pos=(x + dp(6), y + ch - tex.height - dp(4)))
-            else:  # back
-                Color(0.45, 0.08, 0.12, 1)
-                RoundedRectangle(pos=(x, y), size=(cw, ch), radius=[dp(10)])
+            if self.held:
+                Color(1, 0.85, 0.25, 0.30)
+                RoundedRectangle(pos=(x - dp(6), y - dp(6)), size=(cw + dp(12), ch + dp(12)),
+                                 radius=[dp(12)])
                 Color(*GOLD)
-                Line(rounded_rectangle=(x + dp(6), y + dp(6), cw - dp(12), ch - dp(12),
-                                        dp(7)), width=dp(1.4))
-                draw_suit(0, cx, cy, cw * 0.5)
-                tex = text_texture("?", sp(30), GOLD)
+                RoundedRectangle(pos=(x - dp(2.5), y - dp(2.5)), size=(cw + dp(5), ch + dp(5)),
+                                 radius=[dp(8)])
+            else:
+                Color(0, 0, 0, 0.55)
+                RoundedRectangle(pos=(x - dp(1.5), y - dp(2.5)), size=(cw + dp(3), ch + dp(3)),
+                                 radius=[dp(7)])
+            tex = card_texture(card) if card else None
+            if card is None:
+                Color(0.45, 0.08, 0.12, 1)
+                RoundedRectangle(pos=(x, y), size=(cw, ch), radius=[dp(6)])
+                Color(*GOLD)
+                Line(rounded_rectangle=(x + dp(4), y + dp(4), cw - dp(8), ch - dp(8), dp(4)),
+                     width=dp(1.2))
+                draw_suit(0, x + cw / 2, y + ch / 2, cw * 0.45)
+            elif tex is not None:
                 Color(1, 1, 1, 1)
-                Rectangle(texture=tex, size=tex.size,
-                          pos=(cx - tex.width / 2, y + ch * 0.12))
+                Rectangle(texture=tex, pos=(x, y), size=(cw, ch))
+            else:
+                Color(0.98, 0.97, 0.92, 1)
+                RoundedRectangle(pos=(x, y), size=(cw, ch), radius=[dp(6)])
+                Color(*(RED if card[1] < 2 else INK))
+                draw_suit(card[1], x + cw / 2, y + ch / 2, cw * 0.6)
 
 
 # ---------------------------------------------------------- Herz-Leiter ----
@@ -295,7 +273,7 @@ class HeartCell(Widget):
 
 
 class LadderBar(BoxLayout):
-    """Risikoleiter x1 bis x64 aus Herzen; die aktuelle Stufe blinkt."""
+    """Gewinnleiter x1 bis x64 aus Herzen; die aktuelle Stufe blinkt."""
 
     def __init__(self, **kw):
         super().__init__(orientation="horizontal", spacing=dp(2), **kw)
@@ -321,6 +299,83 @@ class LadderBar(BoxLayout):
                 c.set("off")
 
 
+# ----------------------------------------------- Risiko: Null oder mehr ----
+class RiskTrack(Widget):
+    """Lauflicht aus abwechselnd NULL- und MEHR-Feldern. Das Licht laeuft und bleibt stehen."""
+    cells = 10
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.runner = -1
+        self.result = None          # None, "more" oder "zero" (Endergebnis)
+        self.bind(pos=self.redraw, size=self.redraw)
+
+    def reset(self):
+        self.runner, self.result = -1, None
+        self.redraw()
+
+    def set_runner(self, i):
+        self.runner = i
+        self.redraw()
+
+    def set_result(self, i, more):
+        self.runner, self.result = i, "more" if more else "zero"
+        self.redraw()
+
+    def redraw(self, *_):
+        self.canvas.clear()
+        x, y = self.pos
+        w, h = self.size
+        gap = dp(3)
+        cw = (w - gap * (self.cells - 1)) / self.cells
+        with self.canvas:
+            for i in range(self.cells):
+                cx = x + i * (cw + gap)
+                more = i % 2 == 1
+                lit = i == self.runner
+                if more:
+                    base = (0.80, 0.62, 0.15, 1)
+                    tcol = INK
+                else:
+                    base = (0.25, 0.04, 0.07, 1)
+                    tcol = (0.95, 0.85, 0.85, 1)
+                if lit:
+                    if self.result == "more":
+                        glow, base = (0.3, 1.0, 0.4), (0.35, 0.95, 0.40, 1)
+                    elif self.result == "zero":
+                        glow, base = (1.0, 0.1, 0.1), (0.95, 0.12, 0.12, 1)
+                    else:
+                        glow, base = (1.0, 0.95, 0.6), (1.0, 0.97, 0.75, 1)
+                    Color(glow[0], glow[1], glow[2], 0.30)
+                    RoundedRectangle(pos=(cx - dp(4), y - dp(4)), size=(cw + dp(8), h + dp(8)),
+                                     radius=[dp(10)])
+                    tcol = INK
+                Color(*base)
+                RoundedRectangle(pos=(cx, y), size=(cw, h), radius=[dp(6)])
+                Color(1, 1, 1, 0.14)
+                RoundedRectangle(pos=(cx + dp(1.5), y + h * 0.5), size=(cw - dp(3), h * 0.46),
+                                 radius=[dp(5)])
+                tex = text_texture("x2" if more else "0", sp(13 if more else 17), tcol)
+                Color(1, 1, 1, 1)
+                Rectangle(texture=tex, size=tex.size,
+                          pos=(cx + (cw - tex.width) / 2, y + (h - tex.height) / 2))
+
+
+class RiskPanel(BoxLayout):
+    def __init__(self, **kw):
+        super().__init__(orientation="vertical", spacing=dp(6), **kw)
+        self.info = Label(text="", font_size=sp(16), bold=True, color=GOLD,
+                          size_hint_y=None, height=dp(30))
+        self.track = RiskTrack(size_hint_y=None, height=dp(86))
+        self.hint = Label(text="", font_size=sp(13), color=(0.8, 0.85, 0.9, 1),
+                          size_hint_y=None, height=dp(28))
+        self.add_widget(Widget())
+        self.add_widget(self.info)
+        self.add_widget(self.track)
+        self.add_widget(self.hint)
+        self.add_widget(Widget())
+
+
 # -------------------------------------------------- Lampen-Taste Halten ----
 class HoldLamp(ButtonBehavior, Widget):
     def __init__(self, **kw):
@@ -337,7 +392,7 @@ class HoldLamp(ButtonBehavior, Widget):
         self.canvas.clear()
         x, y = self.pos
         w, h = self.size
-        r = min(w * 0.40, h * 0.34)
+        r = min(w * 0.36, h * 0.34)
         cx, cy = x + w / 2, y + h * 0.66
         with self.canvas:
             Color(0.12, 0.10, 0.06, 1)
@@ -356,10 +411,43 @@ class HoldLamp(ButtonBehavior, Widget):
             tex = text_texture("HALTEN", sp(10), (0.9, 0.8, 0.5, 1) if not self.disabled
                                else (0.5, 0.45, 0.35, 1))
             Color(1, 1, 1, 1)
-            Rectangle(texture=tex, size=tex.size, pos=(cx - tex.width / 2, y + h * 0.04))
+            Rectangle(texture=tex, size=tex.size, pos=(cx - tex.width / 2, y + h * 0.03))
 
 
 # --------------------------------------------------------- Bausteine ----
+class GlossButton(Button):
+    """Glaenzende Taste mit Schatten, Verlauf und Lichtkante."""
+
+    def __init__(self, text, color, font=17, **kw):
+        super().__init__(text=text, bold=True, font_size=sp(font), background_normal="",
+                         background_down="", background_color=(0, 0, 0, 0), **kw)
+        self.base = color
+        self.bind(pos=self.redraw, size=self.redraw, state=self.redraw, disabled=self.redraw)
+        self.redraw()
+
+    def redraw(self, *_):
+        self.canvas.before.clear()
+        x, y = self.pos
+        w, h = self.size
+        c = self.base
+        k = 0.30 if self.disabled else (0.80 if self.state == "down" else 1.0)
+        dark = sum(c[:3]) < 1.6
+        self.color = (1, 1, 1, 0.45 if self.disabled else 1) if dark else (
+            INK[0], INK[1], INK[2], 0.5 if self.disabled else 1)
+        with self.canvas.before:
+            Color(0, 0, 0, 0.55)
+            RoundedRectangle(pos=(x, y - dp(2.5)), size=(w, h), radius=[dp(11)])
+            Color(c[0] * 0.5 * k, c[1] * 0.5 * k, c[2] * 0.5 * k, 1)
+            RoundedRectangle(pos=(x, y), size=(w, h), radius=[dp(11)])
+            Color(c[0] * k, c[1] * k, c[2] * k, 1)
+            RoundedRectangle(pos=(x + dp(1.5), y + dp(3)), size=(w - dp(3), h - dp(5)),
+                             radius=[dp(10)])
+            if not self.disabled:
+                Color(1, 1, 1, 0.20)
+                RoundedRectangle(pos=(x + dp(4), y + h * 0.52), size=(w - dp(8), h * 0.40),
+                                 radius=[dp(8)])
+
+
 class TitleBar(BoxLayout):
     def __init__(self, text, **kw):
         super().__init__(**kw)
@@ -374,39 +462,63 @@ class TitleBar(BoxLayout):
         with self.canvas.before:
             Color(0.35, 0.05, 0.10, 1)
             RoundedRectangle(pos=(x, y + h * 0.08), size=(w, h * 0.84), radius=[dp(8)])
+            Color(1, 1, 1, 0.08)
+            RoundedRectangle(pos=(x + dp(2), y + h * 0.50), size=(w - dp(4), h * 0.40),
+                             radius=[dp(7)])
             Color(*GOLD)
             Line(rounded_rectangle=(x, y + h * 0.08, w, h * 0.84, dp(8)), width=dp(1.3))
-            for cx, suit in ((x + h * 0.55, 0), (x + w - h * 0.55, 0),
-                             (x + h * 1.2, 1), (x + w - h * 1.2, 3)):
-                Color(*(RED if suit < 2 else (0.1, 0.1, 0.12, 1)))
+            for cx, suit in ((x + h * 0.55, 0), (x + h * 1.2, 1),
+                             (x + w - h * 1.2, 2), (x + w - h * 0.55, 3)):
+                Color(*(RED if suit < 2 else (0.85, 0.85, 0.88, 1)))
                 draw_suit(suit, cx, y + h / 2, h * 0.5)
+
+
+class PayRow(BoxLayout):
+    def __init__(self, name, mult, **kw):
+        super().__init__(padding=[dp(8), 0], **kw)
+        self.name = name
+        self.lit = False
+        self.l1 = Label(text=name, font_size=sp(13), halign="left", valign="middle",
+                        color=(0.86, 0.9, 0.95, 1))
+        self.l2 = Label(text="x%d" % mult, font_size=sp(13), bold=True, halign="right",
+                        valign="middle", color=GOLD, size_hint_x=0.35)
+        for lab in (self.l1, self.l2):
+            lab.bind(size=lambda w, s: setattr(w, "text_size", s))
+            self.add_widget(lab)
+        self.bind(pos=self.redraw, size=self.redraw)
+
+    def set_lit(self, lit):
+        if lit != self.lit:
+            self.lit = lit
+            self.l1.color = INK if lit else (0.86, 0.9, 0.95, 1)
+            self.l2.color = INK if lit else GOLD
+            self.redraw()
+
+    def redraw(self, *_):
+        self.canvas.before.clear()
+        with self.canvas.before:
+            Color(*(GOLD if self.lit else (1, 1, 1, 0.05)))
+            RoundedRectangle(pos=(self.x + dp(1), self.y + dp(1)),
+                             size=(self.width - dp(2), self.height - dp(2)), radius=[dp(6)])
 
 
 class PayTable(GridLayout):
     def __init__(self, **kw):
-        super().__init__(cols=2, **kw)
-        self.labels = {}
+        super().__init__(cols=2, spacing=[dp(6), dp(3)], **kw)
+        self.paylines = {}
         for name, mult in PAYTABLE:
-            lab = Label(text="%s  x%d" % (name, mult), font_size=sp(12.5),
-                        color=(0.85, 0.9, 0.85, 1))
-            self.labels[name] = lab
-            self.add_widget(lab)
+            row = PayRow(name, mult)
+            self.paylines[name] = row
+            self.add_widget(row)
 
     def highlight(self, name):
-        for n, lab in self.labels.items():
-            lab.color = GOLD if n == name else (0.85, 0.9, 0.85, 1)
-            lab.bold = n == name
-
-
-def styled_button(text, color, font=17, **kw):
-    return Button(text=text, bold=True, font_size=sp(font), background_normal="",
-                  background_down="", background_color=color,
-                  color=(1, 1, 1, 1) if sum(color[:3]) < 1.6 else INK, **kw)
+        for n, row in self.paylines.items():
+            row.set_lit(n == name)
 
 
 class Machine(BoxLayout):
     def __init__(self, store_path, **kw):
-        super().__init__(orientation="vertical", padding=dp(14), spacing=dp(6), **kw)
+        super().__init__(orientation="vertical", padding=dp(14), spacing=dp(7), **kw)
         self.store_path = store_path
         self.game = Game()
         self._load()
@@ -418,6 +530,12 @@ class Machine(BoxLayout):
         with self.canvas.before:
             Color(*BG)
             self._bg = Rectangle(pos=self.pos, size=self.size)
+            tex = image_texture("bg.png")
+            if tex is not None:
+                Color(1, 1, 1, 1)
+                self._bgimg = Rectangle(texture=tex, pos=self.pos, size=self.size)
+            else:
+                self._bgimg = None
             Color(*GOLD)
             self._frame = Line(rounded_rectangle=(0, 0, 10, 10, 10), width=dp(3))
             Color(0.55, 0.40, 0.08, 1)
@@ -428,12 +546,12 @@ class Machine(BoxLayout):
         self.bind(pos=self._layout_bg, size=self._layout_bg)
 
         # Anzeigen
-        top = BoxLayout(size_hint_y=None, height=dp(62), spacing=dp(8))
+        top = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(8))
         self.credit_led = LedDisplay(digits=6)
-        self.stake_led = LedDisplay(digits=3)
+        self.stake_led = LedDisplay(digits=2)
         self.win_led = LedDisplay(digits=6)
-        for cap, led, hint in (("PUNKTE", self.credit_led, 1.6), ("EINSATZ", self.stake_led, 0.8),
-                               ("GEWINN", self.win_led, 1.6)):
+        for cap, led, hint in (("PUNKTE", self.credit_led, 1.7), ("EINSATZ", self.stake_led, 0.6),
+                               ("GEWINN", self.win_led, 1.7)):
             col = BoxLayout(orientation="vertical", size_hint_x=hint)
             col.add_widget(Label(text=cap, font_size=sp(11), bold=True, color=GOLD,
                                  size_hint_y=None, height=dp(16)))
@@ -442,19 +560,18 @@ class Machine(BoxLayout):
         self.add_widget(top)
 
         self.add_widget(TitleBar("KARTENWALZEN", size_hint_y=None, height=dp(44)))
-
-        self.ladder = LadderBar(size_hint_y=None, height=dp(42))
+        self.ladder = LadderBar(size_hint_y=None, height=dp(40))
         self.add_widget(self.ladder)
 
         self.msg = Label(text="", font_size=sp(15), color=(0.95, 0.95, 0.85, 1),
                          size_hint_y=None, height=dp(26))
         self.add_widget(self.msg)
 
-        # Walzenfenster
+        # Walzenfenster mit echten Kartenbildern
         window = BoxLayout(spacing=dp(6), padding=[dp(8), dp(8)], size_hint_y=None,
-                           height=dp(138))
+                           height=dp(118))
         with window.canvas.before:
-            Color(0.0, 0.0, 0.0, 1)
+            Color(0.0, 0.0, 0.0, 0.85)
             self._win_bg = RoundedRectangle(pos=window.pos, size=window.size, radius=[dp(10)])
             Color(*GOLD)
             self._win_line = Line(rounded_rectangle=(0, 0, 10, 10, 10), width=dp(2))
@@ -481,27 +598,14 @@ class Machine(BoxLayout):
         # Mitte: Gewinntabelle oder Risiko-Bereich
         self.middle = BoxLayout()
         self.paytable = PayTable()
-        self.risk_panel = BoxLayout(orientation="vertical", spacing=dp(4))
-        self.risk_info = Label(text="", font_size=sp(15), bold=True, color=GOLD,
-                               size_hint_y=None, height=dp(26))
-        row = BoxLayout(spacing=dp(10))
-        self.btn_red = styled_button("ROT", RED, 20)
-        self.btn_black = styled_button("SCHWARZ", (0.10, 0.10, 0.13, 1), 18)
-        self.btn_red.bind(on_release=lambda *_: self.on_guess(True))
-        self.btn_black.bind(on_release=lambda *_: self.on_guess(False))
-        self.risk_card = RiskCard()
-        row.add_widget(self.btn_red)
-        row.add_widget(self.risk_card)
-        row.add_widget(self.btn_black)
-        self.risk_panel.add_widget(self.risk_info)
-        self.risk_panel.add_widget(row)
+        self.risk_panel = RiskPanel()
         self.add_widget(self.middle)
 
         # Steuerung
         row1 = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(44))
-        self.btn_minus = styled_button("Einsatz -", (0.22, 0.26, 0.34, 1), 15)
-        self.btn_plus = styled_button("Einsatz +", (0.22, 0.26, 0.34, 1), 15)
-        self.btn_sound = styled_button("Ton an", (0.22, 0.26, 0.34, 1), 15)
+        self.btn_minus = GlossButton("Einsatz -", (0.24, 0.30, 0.42, 1), 15)
+        self.btn_plus = GlossButton("Einsatz +", (0.24, 0.30, 0.42, 1), 15)
+        self.btn_sound = GlossButton("Ton an", (0.24, 0.30, 0.42, 1), 15)
         self.btn_minus.bind(on_release=lambda *_: self.on_stake(-1))
         self.btn_plus.bind(on_release=lambda *_: self.on_stake(1))
         self.btn_sound.bind(on_release=lambda *_: self.on_sound())
@@ -509,10 +613,10 @@ class Machine(BoxLayout):
             row1.add_widget(b)
         self.add_widget(row1)
 
-        row2 = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(60))
-        self.btn_main = styled_button("START", (0.10, 0.58, 0.26, 1), 18)
-        self.btn_risk = styled_button("RISIKO", (0.88, 0.50, 0.08, 1), 18)
-        self.btn_take = styled_button("NEHMEN", GOLD, 18)
+        row2 = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(62))
+        self.btn_main = GlossButton("START", (0.12, 0.62, 0.28, 1), 18)
+        self.btn_risk = GlossButton("RISIKO", (0.90, 0.45, 0.06, 1), 18)
+        self.btn_take = GlossButton("NEHMEN", GOLD, 18)
         self.btn_main.bind(on_release=lambda *_: self.on_main())
         self.btn_risk.bind(on_release=lambda *_: self.on_risk())
         self.btn_take.bind(on_release=lambda *_: self.on_take())
@@ -529,6 +633,8 @@ class Machine(BoxLayout):
         x, y = self.pos
         w, h = self.size
         self._bg.pos, self._bg.size = self.pos, self.size
+        if self._bgimg is not None:
+            self._bgimg.pos, self._bgimg.size = self.pos, self.size
         self._frame.rounded_rectangle = (x + dp(3), y + dp(3), w - dp(6), h - dp(6), dp(14))
         self._frame2.rounded_rectangle = (x + dp(8), y + dp(8), w - dp(16), h - dp(16), dp(10))
         self._flash_rect.pos, self._flash_rect.size = self.pos, self.size
@@ -594,12 +700,6 @@ class Machine(BoxLayout):
             g.draw()
             self.animate(changing)
 
-    def on_risk(self):
-        if not self._busy and self.game.risk_start():
-            self.risk_card.set_mode("back")
-            self.sfx.play("risk_start")
-            self.refresh()
-
     def on_take(self):
         if not self._busy and self.game.take():
             self.sfx.play("coins")
@@ -635,53 +735,69 @@ class Machine(BoxLayout):
                     mult = g.win // max(1, g.stake)
                     self.sfx.play("win_big" if mult >= 10 else "win_small")
                     self.flash((1.0, 0.85, 0.3))
-                elif g.state == "idle" and g.win == 0 and g.win_name is None and g.cards[0]:
-                    self.sfx.play("lose", 0.5)
+                elif g.state == "idle" and g.win == 0 and g.win_name is None:
+                    self.sfx.play("lose", 0.35)
                 self.refresh()
                 return False
             return True
 
         Clock.schedule_interval(step, 0.06)
 
-    # --- Risiko mit Spannung ----------------------------------------------
-    def on_guess(self, red):
+    # --- Risiko: Null oder mehr --------------------------------------------
+    def on_risk(self):
         g = self.game
-        if self._busy or g.state != "risk":
+        if self._busy or g.state not in ("result", "risk"):
             return
         snap = {"win": g.win, "rung": g.rung, "credit": g.credit}
-        won = g.risk_guess(red)
-        card = g.last_card
-        final_red = is_red(card)
+        won = g.risk_play()
+        if won is None:
+            return
         self._busy = True
         self.frozen = snap
         self.refresh()
-        self.msg.text = "Rot oder Schwarz ...?"
-        self.risk_info.text = "Es wird gezogen ..."
+        panel, track = self.risk_panel, self.risk_panel.track
+        panel.info.text = "Null oder mehr ...?"
+        panel.hint.text = ""
+        self.msg.text = "Die Spannung steigt ..."
+        track.reset()
+        self.sfx.play("risk_start")
+        Clock.schedule_once(lambda dt: self.sfx.play("risk_riser"), 0.3)
 
-        delays = [0.07] * 8 + [0.10] * 4 + [0.15] * 3 + [0.22] * 2 + [0.32, 0.46, 0.70]
-        n = len(delays)
-        start_red = final_red if (n - 1) % 2 == 0 else not final_red
+        cells = RiskTrack.cells
+        p0 = random.randrange(cells)
+        total = random.randint(27, 35)
+        # Endfeld: ungerade = MEHR, gerade = NULL
+        while ((p0 + total) % cells % 2 == 1) != won:
+            total += 1
+        delays = [0.035 + 0.36 * (i / total) ** 3 for i in range(total)]
+        state = {"heart": False}
 
-        def flip(i):
-            if i >= n:
-                reveal()
+        def step(i):
+            pos = (p0 + i + 1) % cells
+            track.set_runner(pos)
+            self.sfx.play("risk_tick_hi" if pos % 2 else "risk_tick_lo",
+                          0.5 + 0.5 * i / total)
+            if not state["heart"] and i > total * 0.78:
+                state["heart"] = True
+                self.sfx.play("heart", 0.9)
+            if i + 1 >= total:
+                Clock.schedule_once(lambda dt: reveal(pos), 0.7)
                 return
-            face_red = start_red if i % 2 == 0 else not start_red
-            self.risk_card.set_mode("red" if face_red else "black")
-            self.sfx.play("risk_tick", 0.5 + 0.5 * i / n)
-            Clock.schedule_once(lambda dt: flip(i + 1), delays[i])
+            Clock.schedule_once(lambda dt: step(i + 1), delays[i])
 
-        def reveal():
-            self.risk_card.set_mode("face", card)
+        def reveal(pos):
+            track.set_result(pos, won)
+            self.sfx.stop("risk_riser")
             self.msg.text = g.message
-            self.risk_info.text = "Treffer!" if won else "Daneben!"
             if won:
                 self.sfx.play("risk_win")
-                self.flash((1.0, 0.85, 0.3))
+                self.flash((0.4, 1.0, 0.5))
+                panel.info.text = "MEHR!"
             else:
                 self.sfx.play("risk_lose")
-                self.flash((0.9, 0.1, 0.1))
-            Clock.schedule_once(finish, 1.5)
+                self.flash((1.0, 0.1, 0.1))
+                panel.info.text = "NULL!"
+            Clock.schedule_once(finish, 1.8)
 
         def finish(dt):
             self.frozen = None
@@ -689,7 +805,7 @@ class Machine(BoxLayout):
             self._save()
             self.refresh()
 
-        flip(0)
+        step(0)
 
     # --- Anzeige ----------------------------------------------------------
     def refresh(self):
@@ -707,26 +823,26 @@ class Machine(BoxLayout):
             lamp.set_lit(g.held[i] and g.state == "held")
             lamp.disabled = g.state != "held"
         self.paytable.highlight(g.win_name)
-        self.ladder.show(view["rung"], g.state in ("risk", "result") and view["win"] > 0
-                         or self.frozen is not None)
+        in_risk = g.state in ("result", "risk") or self.frozen is not None
+        self.ladder.show(view["rung"], in_risk and view["win"] > 0)
 
-        in_risk = g.state == "risk" or self.frozen is not None
         mode = "risk" if in_risk else "pay"
         if mode != self._mode:
             self._mode = mode
             self.middle.clear_widgets()
             self.middle.add_widget(self.risk_panel if in_risk else self.paytable)
+            if in_risk:
+                self.risk_panel.track.reset()
         if in_risk and not self.frozen:
-            self.risk_info.text = "Gewinn %d  ->  bei Treffer %d" % (g.win, g.win * 2)
-        for b in (self.btn_red, self.btn_black):
-            b.disabled = bool(self.frozen)
+            self.risk_panel.info.text = "Gewinn %d  ->  MEHR: %d  oder  NULL" % (g.win, g.win * 2)
+            self.risk_panel.hint.text = "RISIKO wagen oder NEHMEN"
 
-        self.btn_risk.disabled = g.state != "result"
-        self.btn_take.disabled = g.state not in ("result", "risk")
-        self.btn_main.disabled = g.state in ("result", "risk")
+        self.btn_risk.disabled = bool(self.frozen) or g.state not in ("result", "risk")
+        self.btn_take.disabled = bool(self.frozen) or g.state not in ("result", "risk")
+        self.btn_main.disabled = in_risk
         self.btn_main.text = "ZIEHUNG" if g.state == "held" else (
             "NEU STARTEN" if g.credit < g.stake else "START")
-        self.btn_minus.disabled = self.btn_plus.disabled = g.state != "idle"
+        self.btn_minus.disabled = self.btn_plus.disabled = g.state != "idle" or bool(self.frozen)
 
 
 class KartenwalzenApp(App):

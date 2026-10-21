@@ -53,29 +53,35 @@ class GameTest(unittest.TestCase):
         self.assertEqual(g.credit, 130)
         self.assertEqual(g.state, "idle")
 
-    def test_risk_win_and_lose(self):
-        class Fixed:
-            def __init__(self, suit):
-                self.suit = suit
+    def test_risk_null_oder_mehr(self):
+        class R:
+            def __init__(self, v):
+                self.v = v
 
-            def choice(self, seq):
-                return self.suit if seq == [0, 1, 2, 3] else seq[0]
-        g = Game(credit=100, stake=10, rng=Fixed(0))   # immer Herz = rot
-        g.state, g.win = "risk", 20
-        self.assertTrue(g.risk_guess(True))
-        self.assertEqual(g.win, 40)
-        self.assertFalse(g.risk_guess(False))
-        self.assertEqual(g.win, 0)
-        self.assertEqual(g.state, "idle")
+            def random(self):
+                return self.v
+        g = Game(credit=100, stake=10, rng=R(0.1))      # 0.1 -> mehr
+        g.state, g.win = "result", 20
+        self.assertTrue(g.risk_play())
+        self.assertEqual((g.win, g.state, g.rung), (40, "risk", 1))
+        g.rng = R(0.9)                                  # 0.9 -> null
+        self.assertFalse(g.risk_play())
+        self.assertEqual((g.win, g.state, g.credit), (0, "idle", 100))
+
+    def test_risk_nicht_moeglich(self):
+        g = Game(credit=100, stake=10)
+        self.assertIsNone(g.risk_play())
+        g.state, g.win = "held", 10
+        self.assertIsNone(g.risk_play())
 
     def test_top_rung_pays_out(self):
-        class Red:
-            def choice(self, seq):
-                return 0 if seq == [0, 1, 2, 3] else seq[0]
-        g = Game(credit=0, stake=10, rng=Red())
-        g.state, g.win = "risk", 10
+        class Win:
+            def random(self):
+                return 0.0
+        g = Game(credit=0, stake=10, rng=Win())
+        g.state, g.win = "result", 10
         for _ in range(len(LADDER) - 1):
-            g.risk_guess(True)
+            g.risk_play()
         self.assertEqual(g.state, "idle")
         self.assertEqual(g.credit, 10 * 2 ** (len(LADDER) - 1))
 

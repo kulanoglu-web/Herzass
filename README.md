@@ -1,17 +1,20 @@
 # Kartenwalzen (Spielgeld)
 
-Eigenes Walzen-Kartenspiel: Karten ziehen, Walzen halten, einmal nachziehen,
-Gewinn nehmen oder auf der Risikoleiter (x1 bis x64) auf Rot/Schwarz verdoppeln.
+Walzen-Kartenspiel: fünf Karten, Walzen halten, einmal nachziehen. Gewinne kann man
+nehmen oder bei "Risiko" wagen: Das Lauflicht entscheidet zwischen NULL (alles weg)
+und MEHR (Gewinn verdoppelt sich, Leiter x1 bis x64).
 
 ## Am PC testen
-    pip install kivy==2.3.1
+    pip install kivy==2.2.1
     python main.py
     python -m unittest test_logic
 
 ## APK bauen
-Variante A (einfach, kostenlos): Ordner in ein GitHub-Repository hochladen,
-unter "Actions" den Workflow "APK bauen" starten, danach unter
-"Artifacts" die Datei kartenwalzen-apk herunterladen (dauert ca. 20-40 Minuten).
+GitHub Actions starten ("APK bauen"). Die fertige APK liegt danach im Branch `apk-build`
+(Datei `app.apk`) und als Artifact des Laufs.
 
-Variante B: Auf Linux/WSL/Colab `pip install buildozer` und
-`buildozer android debug` im Projektordner. Die APK liegt dann in `bin/`.
+## Quellen
+- Kartenbilder: Byron Knoll, "vector-playing-cards" (gemeinfrei), Sammlung von
+  github.com/notpeter/vector-playing-cards (Public Domain / WTFPL).
+- Klänge: selbst synthetisiert (`tools/make_sounds.py`). Hintergrund: `tools/make_bg.py`.
+- Kartenbilder neu erzeugen: `python tools/make_cards.py <Ordner mit SVGs> 240`

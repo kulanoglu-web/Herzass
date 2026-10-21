@@ -1,0 +1,2 @@
+Kartenmotive: Byron Knoll, "vector-playing-cards" (gemeinfrei / Public Domain),
+Sammlung: github.com/notpeter/vector-playing-cards (Public Domain, alternativ WTFPL).

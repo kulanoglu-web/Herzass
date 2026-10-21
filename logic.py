@@ -72,7 +72,7 @@ def evaluate(cards):
 
 
 class Game:
-    """Zustandsautomat: idle -> held -> result -> (risk) -> idle"""
+    """Zustandsautomat: idle -> held -> result -> (risk, risk, ...) -> idle"""
 
     def __init__(self, credit=START_CREDIT, stake=10, rng=None):
         self.rng = rng or random.Random()
@@ -85,7 +85,6 @@ class Game:
         self.win = 0          # aktueller Gewinn (kann in der Risikoleiter wachsen)
         self.win_name = None
         self.rung = 0         # Stufe auf der Risikoleiter
-        self.last_card = None  # zuletzt gezogene Risikokarte
         self.message = "Einsatz waehlen und START druecken"
 
     # --- Einsatz ---------------------------------------------------------
@@ -110,7 +109,6 @@ class Game:
         self.win = 0
         self.win_name = None
         self.rung = 0
-        self.last_card = None
         self.state = "held"
         self.message = "Walzen halten, dann ZIEHUNG"
         return True
@@ -149,32 +147,25 @@ class Game:
         self.state = "idle"
         return True
 
-    def risk_start(self):
-        if self.state != "result":
-            return False
-        self.state = "risk"
-        self.message = "Rot oder Schwarz? Gewinn verdoppelt sich"
-        return True
-
-    def risk_guess(self, red):
-        """red=True tippt auf Rot (Herz/Karo), sonst Schwarz."""
-        if self.state != "risk":
+    def risk_play(self):
+        """Null oder mehr: mit 50 % verdoppelt sich der Gewinn, sonst ist er weg.
+        Gibt True (mehr), False (null) oder None (nicht moeglich) zurueck."""
+        if self.state not in ("result", "risk") or self.win <= 0:
             return None
-        card = (self.rng.choice(RANKS), self.rng.choice(SUITS))
-        self.last_card = card
-        if is_red(card) == red:
+        if self.rng.random() < 0.5:
             self.rung += 1
             self.win *= 2
             if self.rung >= len(LADDER) - 1:
                 self.credit += self.win
-                self.message = "Oberste Stufe! %d Punkte uebernommen" % self.win
+                self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
                 self.win = 0
                 self.rung = 0
                 self.state = "idle"
             else:
-                self.message = "Richtig! Jetzt %d Punkte" % self.win
+                self.state = "risk"
+                self.message = "MEHR! Jetzt %d Punkte" % self.win
             return True
-        self.message = "Falsch geraten - Gewinn verloren"
+        self.message = "NULL - Gewinn verloren"
         self.win = 0
         self.rung = 0
         self.state = "idle"
