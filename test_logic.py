@@ -53,10 +53,10 @@ class GameTest(unittest.TestCase):
         self.assertEqual(g.credit, 130)
         self.assertEqual(g.state, "idle")
 
-    def test_risk_cells_fair(self):
-        self.assertEqual(RISK_CELLS[0], 0)           # NULL links
-        self.assertEqual(RISK_CELLS[1], 2)           # im Wechsel NULL / echte Vermehrung
-        self.assertAlmostEqual(sum(RISK_CELLS) / float(len(RISK_CELLS)), 1.0)
+    def test_risk_cells(self):
+        self.assertEqual(RISK_CELLS[0], 0)            # NULL am Anfang
+        self.assertEqual(RISK_CELLS[-1], 64)          # ganz oben x64
+        self.assertEqual(sorted(RISK_CELLS), RISK_CELLS)
 
     def test_risk_null(self):
         g = Game(credit=100, stake=10)
@@ -64,24 +64,24 @@ class GameTest(unittest.TestCase):
         self.assertEqual(g.risk_resolve(0), 0)
         self.assertEqual((g.win, g.state), (0, "idle"))
 
-    def test_risk_mehr(self):
+    def test_risk_faktor(self):
         g = Game(credit=100, stake=10)
         g.state, g.win = "result", 20
-        self.assertEqual(g.risk_resolve(1), 2)
-        self.assertEqual((g.win, g.state, g.rung), (40, "risk", 1))
+        self.assertEqual(g.risk_resolve(3), 4)        # Herz x4
+        self.assertEqual((g.win, g.state, g.rung), (80, "risk", 2))
+        self.assertEqual(g.risk_resolve(1), 1)        # x1 behaelt den Gewinn
+        self.assertEqual(g.win, 80)
 
     def test_risk_nicht_moeglich(self):
         g = Game()
-        self.assertIsNone(g.risk_resolve(1))
+        self.assertIsNone(g.risk_resolve(3))
         self.assertFalse(g.risk_start())
 
-    def test_top_rung_pays_out(self):
+    def test_top_pays_out(self):
         g = Game(credit=0, stake=10)
         g.state, g.win = "risk", 10
-        for _ in range(len(LADDER) - 1):
-            g.risk_resolve(len(RISK_CELLS) - 1)
-        self.assertEqual(g.state, "idle")
-        self.assertEqual(g.credit, 10 * 2 ** (len(LADDER) - 1))
+        g.risk_resolve(len(RISK_CELLS) - 1)
+        self.assertEqual((g.state, g.credit), ("idle", 640))
 
     def test_simulation_conserves_credit_rules(self):
         rng = random.Random(42)

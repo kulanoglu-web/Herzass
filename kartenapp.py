@@ -26,7 +26,7 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
-from logic import LADDER, PAYTABLE, RANKS, SUITS, Game
+from logic import LADDER, PAYTABLE, RANKS, RISK_CELLS, SUITS, Game
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BG = (0.05, 0.05, 0.07, 1)
@@ -316,7 +316,7 @@ class LadderBar(Widget):
         self.cells = [HeartCell("0")] + [HeartCell("x%d" % m) for m in LADDER]
         for c in self.cells:
             self.add_widget(c)
-        self.rung, self.active, self.phase, self.zero = 0, False, False, False
+        self.rung, self.active, self.phase, self.runner = 0, False, False, None
         self.bind(pos=self._layout, size=self._layout)
         Clock.schedule_interval(self._blink, 0.35)
 
@@ -366,14 +366,19 @@ class LadderBar(Widget):
         if self.active:
             self.show(self.rung, self.active)
 
-    def set_zero(self, on):
-        if on != self.zero:
-            self.zero = on
+    def set_runner(self, idx):
+        """Lauflicht auf Herz idx (0 = NULL ... 7 = x64); None schaltet es aus."""
+        if idx != self.runner:
+            self.runner = idx
             self.show(self.rung, self.active)
 
     def show(self, rung, active):
         self.rung, self.active = rung, active
-        self.cells[0].set("active", True) if self.zero else self.cells[0].set("off")
+        if self.runner is not None:
+            for i, c in enumerate(self.cells):
+                c.set("active", True) if i == self.runner else c.set("off")
+            return
+        self.cells[0].set("off")
         for i, c in enumerate(self.cells[1:]):
             if active and i == rung:
                 c.set("active", self.phase)
@@ -797,7 +802,7 @@ class Machine(BoxLayout):
         self.btn_risk = GlossButton("RISIKO", (0.92, 0.06, 0.13, 1), 18)
         self.btn_take = GlossButton("NEHMEN", GOLD, 18)
         self.btn_main.bind(on_release=lambda *_: self.on_main())
-        self.btn_risk.bind(on_release=lambda *_: self.on_risk())
+        self.btn_risk.bind(on_press=lambda *_: self.on_risk())
         self.btn_take.bind(on_release=lambda *_: self.on_take())
         for b in (self.btn_main, self.btn_risk, self.btn_take):
             row2.add_widget(b)
@@ -806,6 +811,15 @@ class Machine(BoxLayout):
         self.add_widget(Label(text="Nur Spielgeld - kein Echtgeld", font_size=sp(10.5),
                               color=(0.7, 0.75, 0.8, 1), size_hint_y=None, height=dp(16)))
         self.refresh()
+        Clock.schedule_once(self._preload, 0.5)
+
+    def _preload(self, dt):
+        for name in os.listdir(self.sfx.base):
+            if name.endswith('.wav'):
+                try:
+                    self.sfx.sounds[name[:-4]] = SoundLoader.load(os.path.join(self.sfx.base, name))
+                except Exception:
+                    pass
 
     # --- Rahmen / Effekte -------------------------------------------------
     def _layout_bg(self, *_):
@@ -1006,6 +1020,8 @@ class Machine(BoxLayout):
         self.pause = False
         self._begin_round()
 
+    DWELL = [0.42, 0.34, 0.24, 0.17, 0.12, 0.09, 0.07, 0.06]     # oben flitzt das Licht
+
     def _begin_round(self):
         g = self.game
         if self._busy or not g.risk_start():
@@ -1013,37 +1029,47 @@ class Machine(BoxLayout):
         self._busy = True
         self.running = True
         self.frozen = {"win": g.win, "rung": g.rung, "credit": g.credit}
-        panel, track = self.risk_panel, self.risk_panel.track
+        track = self.risk_panel.track
         track.reset()
         self.refresh()
-        self.msg.text = "STOPP druecken - bei der Zahl!"
-        self.sfx.play("risk_start")
-        Clock.schedule_once(lambda dt: self.running and self.sfx.play("risk_loop", 0.8, loop=True), 0.5)
-        self._more_text = str(g.win * 2)
-        self._pos = random.randrange(2)
-        # immer schneller: Null, Zahl, Null, Zahl ... das Tempo steigt bei jedem Wechsel
-        state = {"dt": 1.1 * 0.93 ** min(g.rung, 5), "min": 0.12, "n": 0}
+        self.msg.text = "STOPP druecken!"
+        self.sfx.play("risk_start", 0.7)
+        Clock.schedule_once(lambda dt: self.running and self.sfx.play("risk_loop", 0.7, loop=True), 0.4)
+        n = len(RISK_CELLS)
+        self._pos = 0
+        self._dir = 1
+        base = g.win
+        state = {"f": 1.5, "n": 0}
+
+        def show_pos():
+            v = RISK_CELLS[self._pos]
+            track.show(1 if v else 0, str(base * v) if v else "")
+            self.ladder.set_runner(self._pos)
 
         def run(dt):
             if not self.running:
                 return
-            self._pos = 1 - self._pos
-            track.show(self._pos, self._more_text if self._pos else "")
-            self.ladder.set_zero(self._pos == 0)
+            nxt = self._pos + self._dir
+            if nxt < 0 or nxt >= n:
+                self._dir = -self._dir
+                nxt = self._pos + self._dir
+            self._pos = nxt
+            show_pos()
             state["n"] += 1
-            if state["dt"] > 0.07 or state["n"] % 2 == 0:
-                self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.4)
-            state["dt"] = max(state["min"], state["dt"] * 0.82)
-            if state["n"] >= 7:                  # kein STOPP: nach 7 Wechseln stoppt es von selbst
-                self._ev = Clock.schedule_once(lambda dt: self.on_stop(), state["dt"])
+            if state["n"] % 2 == 0 or state["f"] > 0.9:
+                self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.35)
+            state["f"] = max(0.55, state["f"] * 0.97)             # langsam los, dann schneller
+            wait = self.DWELL[self._pos] * state["f"]
+            if state["n"] >= 32:                                  # kein STOPP: es haelt von selbst
+                self._ev = Clock.schedule_once(lambda dt: self.on_stop(), wait)
                 return
-            self._ev = Clock.schedule_once(run, state["dt"])
+            self._ev = Clock.schedule_once(run, wait)
 
-        track.show(self._pos, self._more_text if self._pos else "")
-        self.ladder.set_zero(self._pos == 0)
-        self._ev = Clock.schedule_once(run, state["dt"])
+        show_pos()
+        self._ev = Clock.schedule_once(run, self.DWELL[0] * state["f"])
 
     def on_stop(self):
+        """Haelt das Licht sofort an (Reaktion beim Druecken, nicht erst beim Loslassen)."""
         if not self.running:
             return
         self.running = False
@@ -1051,63 +1077,61 @@ class Machine(BoxLayout):
         if self._ev is not None:
             self._ev.cancel()
         g = self.game
-        panel, track = self.risk_panel, self.risk_panel.track
+        track = self.risk_panel.track
+        pos = self._pos
+        v = RISK_CELLS[pos]
+        text = str(g.win * v) if v else ""
         self.sfx.stop("risk_loop")
         self.sfx.play("risk_stop")
-        self.sfx.play("risk_hold")
         self.msg.text = "Und ...?"
-        self.refresh()
-        side = self._pos
-        text = self._more_text if side else ""
+        mult_box = {"m": 0}
 
         def blink(k):
-            if k % 2 == 0:
-                track.show(side, text)
-                self.ladder.set_zero(side == 0)
-                self.sfx.play("heart", 0.8)
+            lit = k % 2 == 0
+            self.ladder.set_runner(pos if lit else -1)
+            if lit:
+                track.show(1 if v else 0, text)
             else:
                 track.blank()
-                self.ladder.set_zero(False)
+            if lit:
+                self.sfx.play("heart", 0.7)
             if k >= 3:
                 reveal()
             else:
-                Clock.schedule_once(lambda dt: blink(k + 1), 0.2)
-
-        mult_box = {"m": 0}
+                Clock.schedule_once(lambda dt: blink(k + 1), 0.16)
 
         def reveal():
-            mult = g.risk_resolve(side)
+            mult = g.risk_resolve(pos)
             mult_box["m"] = mult
-            track.show(side, text)
+            self.ladder.set_runner(pos)
+            track.show(1 if v else 0, text)
             track.set_result(bool(mult))
             if mult:
                 self.sfx.play("risk_win")
                 self.flash((1.0, 0.85, 0.4))
-                self.msg.text = "MEHR!"
+                self.msg.text = "x%d!" % mult
             else:
                 self.sfx.play("risk_lose")
                 self.flash((1.0, 0.1, 0.1))
                 self.msg.text = "NULL!"
-            self.ladder.set_zero(side == 0)
-            Clock.schedule_once(finish, 0.9)
+            Clock.schedule_once(finish, 0.8)
 
         def finish(dt):
             self.frozen = None
             self._busy = False
             self.resolving = False
-            self.ladder.set_zero(False)
+            self.ladder.set_runner(None)
             if mult_box["m"] and g.state == "risk":
-                # weiter: die naechste Runde laeuft sofort von selbst
                 self.risk_round += 1
                 self.pause = True
                 self.refresh()
-                self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 0.35)
+                self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 0.3)
                 return
             self.pause = False
             self._save()
             self.refresh()
 
-        Clock.schedule_once(lambda dt: blink(0), 0.1)
+        blink(0)
 
     # --- Anzeige ----------------------------------------------------------
     def refresh(self):

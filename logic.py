@@ -28,8 +28,8 @@ PAY = dict(PAYTABLE)
 
 # Risikoleiter: nach jedem richtigen Tipp verdoppelt sich der Gewinn
 LADDER = [1, 2, 4, 8, 16, 32, 64]
-# Risiko-Lauflicht: gleich grosse Felder, im Wechsel NULL und die echte Vermehrung (x2).
-RISK_CELLS = [0, 2]
+# Risiko-Lauflicht laeuft ueber die Herzen: 0, x1, x2 ... x64 (Wert des Herzens = Faktor).
+RISK_CELLS = [0] + LADDER
 STAKES = [5, 10, 20, 50]
 START_CREDIT = 200
 
@@ -154,8 +154,8 @@ class Game:
         return self.state in ("result", "risk") and self.win > 0
 
     def risk_resolve(self, cell):
-        """Das Lauflicht wurde auf Feld `cell` gestoppt. NULL = Gewinn weg, sonst wird
-        der Gewinn mit dem Wert des Feldes (x2 oder x4) vervielfacht.
+        """Das Licht wurde auf Herz `cell` gestoppt (0 = NULL, dann x1 bis x64).
+        NULL: Gewinn weg.  Sonst wird der Gewinn mit dem Wert des Herzens vervielfacht.
         Gibt den Faktor zurueck (0 = verloren) oder None (nicht moeglich)."""
         if not self.risk_start():
             return None
@@ -167,8 +167,8 @@ class Game:
             self.state = "idle"
             return 0
         self.win *= mult
-        self.rung += 1
-        if self.rung >= len(LADDER) - 1:
+        self.rung = cell - 1
+        if cell == len(RISK_CELLS) - 1:
             self.credit += self.win
             self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
             self.win = 0
@@ -176,7 +176,7 @@ class Game:
             self.state = "idle"
         else:
             self.state = "risk"
-            self.message = "MEHR!"
+            self.message = "x%d!" % mult
         return mult
 
     def reset(self):
