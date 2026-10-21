@@ -30,7 +30,8 @@ PAY = dict(PAYTABLE)
 LADDER = [1, 2, 4, 8, 16, 32, 64]
 # Risiko-Lauflicht laeuft ueber die Herzen: 0, x1, x2 ... x64 (Wert des Herzens = Faktor).
 RISK_CELLS = [0] + LADDER
-STAKES = [5, 10, 20, 50]
+STAKES = [5, 10, 20, 50, 100, 200, 500, 1000]
+MAX_CREDIT = 999999
 START_CREDIT = 200
 
 
@@ -142,7 +143,7 @@ class Game:
     def take(self):
         if self.state not in ("result", "risk") or self.win <= 0:
             return False
-        self.credit += self.win
+        self.credit = min(MAX_CREDIT, self.credit + self.win)
         self.message = "%d Punkte uebernommen" % self.win
         self.win = 0
         self.rung = 0
@@ -166,10 +167,10 @@ class Game:
             self.rung = 0
             self.state = "idle"
             return 0
-        self.win *= mult
+        self.win = min(self.win * mult, MAX_CREDIT)
         self.rung = cell - 1
         if cell == len(RISK_CELLS) - 1:
-            self.credit += self.win
+            self.credit = min(MAX_CREDIT, self.credit + self.win)
             self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
             self.win = 0
             self.rung = 0
@@ -178,6 +179,30 @@ class Game:
             self.state = "risk"
             self.message = "x%d!" % mult
         return mult
+
+    def risk_flip(self, more):
+        """Folgerunden: Null gegen Vermehrung. more=True verdoppelt den Gewinn, sonst ist er weg.
+        Gibt 2 (mehr), 0 (null) oder None (nicht moeglich) zurueck."""
+        if not self.risk_start():
+            return None
+        if not more:
+            self.message = "NULL - Gewinn verloren"
+            self.win = 0
+            self.rung = 0
+            self.state = "idle"
+            return 0
+        self.win = min(self.win * 2, MAX_CREDIT)
+        self.rung += 1
+        if self.rung >= len(LADDER) - 1:
+            self.credit = min(MAX_CREDIT, self.credit + self.win)
+            self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
+            self.win = 0
+            self.rung = 0
+            self.state = "idle"
+        else:
+            self.state = "risk"
+            self.message = "x2!"
+        return 2
 
     def reset(self):
         self.credit = START_CREDIT

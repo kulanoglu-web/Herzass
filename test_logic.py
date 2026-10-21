@@ -72,6 +72,20 @@ class GameTest(unittest.TestCase):
         self.assertEqual(g.risk_resolve(1), 1)        # x1 behaelt den Gewinn
         self.assertEqual(g.win, 80)
 
+    def test_risk_flip(self):
+        g = Game(credit=0, stake=10)
+        g.state, g.win, g.rung = "risk", 20, 2
+        self.assertEqual(g.risk_flip(True), 2)
+        self.assertEqual((g.win, g.rung, g.state), (40, 3, "risk"))
+        self.assertEqual(g.risk_flip(False), 0)
+        self.assertEqual((g.win, g.state), (0, "idle"))
+
+    def test_credit_cap(self):
+        g = Game(credit=999990, stake=10)
+        g.state, g.win = "result", 500
+        g.take()
+        self.assertEqual(g.credit, 999999)
+
     def test_risk_nicht_moeglich(self):
         g = Game()
         self.assertIsNone(g.risk_resolve(3))

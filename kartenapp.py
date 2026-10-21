@@ -730,9 +730,9 @@ class Machine(BoxLayout):
         # Anzeigen
         top = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(8))
         self.credit_led = LedDisplay(digits=6)
-        self.stake_led = LedDisplay(digits=2)
+        self.stake_led = LedDisplay(digits=4)
         self.win_led = LedDisplay(digits=6)
-        for cap, led, hint in (("PUNKTE", self.credit_led, 1.7), ("EINSATZ", self.stake_led, 0.6),
+        for cap, led, hint in (("PUNKTE", self.credit_led, 1.7), ("EINSATZ", self.stake_led, 0.8),
                                ("GEWINN", self.win_led, 1.7)):
             col = BoxLayout(orientation="vertical", size_hint_x=hint)
             col.add_widget(Label(text=cap, font_size=sp(11), bold=True, color=GOLD,
@@ -898,7 +898,7 @@ class Machine(BoxLayout):
                 d = json.load(f)
             self.game.credit = int(d.get("credit", self.game.credit))
             self.game.stake = int(d.get("stake", self.game.stake))
-            if self.game.credit < 5:
+            if self.game.credit < 5 or self.game.credit > 999999:
                 self.game.reset()
         except Exception:
             pass
@@ -1035,38 +1035,54 @@ class Machine(BoxLayout):
         self.msg.text = "STOPP druecken!"
         self.sfx.play("risk_start", 0.7)
         Clock.schedule_once(lambda dt: self.running and self.sfx.play("risk_loop", 0.7, loop=True), 0.4)
-        n = len(RISK_CELLS)
-        self._pos = 0
+        # Erste Runde: Licht laeuft ueber alle Herzen 0..x64 hin und her.
+        # Folgerunden: Null gegen Vermehrung (x2).
+        self._flip = self.risk_round > 0
+        self._path = [0, min(g.rung + 2, len(RISK_CELLS) - 1)] if self._flip else list(range(len(RISK_CELLS)))
+        self._p = random.randrange(len(self._path)) if self._flip else 0
         self._dir = 1
         base = g.win
-        state = {"f": 1.5, "n": 0}
+        state = {"f": 1.5 if not self._flip else 1.6, "n": 0,
+                 "stop_at": random.randint(8, 13) if self._flip else random.randint(24, 40)}
+
+        def value(cell):
+            if self._flip:
+                return 2 if cell else 0
+            return RISK_CELLS[cell]
 
         def show_pos():
-            v = RISK_CELLS[self._pos]
+            cell = self._path[self._p]
+            v = value(cell)
             track.show(1 if v else 0, str(base * v) if v else "")
-            self.ladder.set_runner(self._pos)
+            self.ladder.set_runner(cell)
+
+        def wait_for(cell, f):
+            if self._flip:
+                return 0.30 * f
+            return self.DWELL[cell] * f
 
         def run(dt):
             if not self.running:
                 return
-            nxt = self._pos + self._dir
-            if nxt < 0 or nxt >= n:
+            nxt = self._p + self._dir
+            if nxt < 0 or nxt >= len(self._path):
                 self._dir = -self._dir
-                nxt = self._pos + self._dir
-            self._pos = nxt
+                nxt = self._p + self._dir
+            self._p = nxt
             show_pos()
             state["n"] += 1
+            cell = self._path[self._p]
             if state["n"] % 2 == 0 or state["f"] > 0.9:
-                self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.35)
-            state["f"] = max(0.55, state["f"] * 0.97)             # langsam los, dann schneller
-            wait = self.DWELL[self._pos] * state["f"]
-            if state["n"] >= 32:                                  # kein STOPP: es haelt von selbst
+                self.sfx.play("risk_tick_hi" if cell else "risk_tick_lo", 0.35)
+            state["f"] = max(0.30 if self._flip else 0.55, state["f"] * (0.9 if self._flip else 0.97))
+            wait = wait_for(cell, state["f"])
+            if state["n"] >= state["stop_at"]:                    # kein STOPP: es haelt von selbst
                 self._ev = Clock.schedule_once(lambda dt: self.on_stop(), wait)
                 return
             self._ev = Clock.schedule_once(run, wait)
 
         show_pos()
-        self._ev = Clock.schedule_once(run, self.DWELL[0] * state["f"])
+        self._ev = Clock.schedule_once(run, wait_for(self._path[self._p], state["f"]))
 
     def on_stop(self):
         """Haelt das Licht sofort an (Reaktion beim Druecken, nicht erst beim Loslassen)."""
@@ -1078,8 +1094,9 @@ class Machine(BoxLayout):
             self._ev.cancel()
         g = self.game
         track = self.risk_panel.track
-        pos = self._pos
-        v = RISK_CELLS[pos]
+        cell = self._path[self._p]
+        flip = self._flip
+        v = (2 if cell else 0) if flip else RISK_CELLS[cell]
         text = str(g.win * v) if v else ""
         self.sfx.stop("risk_loop")
         self.sfx.play("risk_stop")
@@ -1088,22 +1105,21 @@ class Machine(BoxLayout):
 
         def blink(k):
             lit = k % 2 == 0
-            self.ladder.set_runner(pos if lit else -1)
+            self.ladder.set_runner(cell if lit else -1)
             if lit:
                 track.show(1 if v else 0, text)
+                self.sfx.play("heart", 0.7)
             else:
                 track.blank()
-            if lit:
-                self.sfx.play("heart", 0.7)
             if k >= 3:
                 reveal()
             else:
                 Clock.schedule_once(lambda dt: blink(k + 1), 0.16)
 
         def reveal():
-            mult = g.risk_resolve(pos)
+            mult = g.risk_flip(cell != 0) if flip else g.risk_resolve(cell)
             mult_box["m"] = mult
-            self.ladder.set_runner(pos)
+            self.ladder.set_runner(cell)
             track.show(1 if v else 0, text)
             track.set_result(bool(mult))
             if mult:
