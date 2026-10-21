@@ -132,7 +132,7 @@ class Game:
         self.win = mult * self.stake
         if self.win:
             self.state = "result"
-            self.message = "%s! %d Punkte - NEHMEN oder RISIKO" % (name, self.win)
+            self.message = "%s! - NEHMEN oder RISIKO" % name
         else:
             self.state = "idle"
             self.message = "Leider nichts. Naechste Runde?"
@@ -176,7 +176,7 @@ class Game:
             self.state = "idle"
         else:
             self.state = "risk"
-            self.message = "MEHR x%d! Jetzt %d Punkte" % (mult, self.win)
+            self.message = "MEHR!"
         return mult
 
     def reset(self):
