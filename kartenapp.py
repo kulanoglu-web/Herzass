@@ -4,6 +4,7 @@ Eigenes Spiel.  Kartenbilder: Byron Knoll (gemeinfrei).  Klaenge selbst erzeugt.
 Nur Spielgeld, kein Echtgeld.  Oberflaeche: Kivy (Desktop und Android-APK).
 """
 import json
+import math
 import os
 import random
 
@@ -290,11 +291,11 @@ class HeartCell(Widget):
                 Color(1.0, 0.95, 0.55, 1) if self.glow else Color(1.0, 0.55, 0.12, 1)
                 tcol = INK
             elif self.state == "passed":
-                Color(1.0, 0.10, 0.18, 1)
+                Color(1.0, 0.35, 0.35, 1)
                 tcol = (1, 1, 1, 1)
             else:
-                Color(0.55, 0.05, 0.12, 1)
-                tcol = (1, 0.85, 0.7, 1)
+                Color(0.92, 0.06, 0.13, 1)
+                tcol = (1, 1, 1, 1)
             draw_suit(0, cx, cy, s * 0.80)
             Color(1, 1, 1, 0.30)
             Ellipse(pos=(cx - s * 0.38, cy + s * 0.12), size=(s * 0.30, s * 0.20))
@@ -310,7 +311,7 @@ class LadderBar(Widget):
 
     def __init__(self, **kw):
         super().__init__(**kw)
-        self.cells = [HeartCell("x%d" % m) for m in LADDER]
+        self.cells = [HeartCell("0")] + [HeartCell("x%d" % m) for m in LADDER]
         for c in self.cells:
             self.add_widget(c)
         self.rung, self.active, self.phase = 0, False, False
@@ -350,7 +351,8 @@ class LadderBar(Widget):
 
     def show(self, rung, active):
         self.rung, self.active = rung, active
-        for i, c in enumerate(self.cells):
+        self.cells[0].set("off")                       # Herz mit NULL am Anfang
+        for i, c in enumerate(self.cells[1:]):
             if active and i == rung:
                 c.set("active", self.phase)
             elif active and i < rung:
@@ -453,9 +455,9 @@ class HoldLamp(ButtonBehavior, Widget):
                 Ellipse(pos=(cx - r * 1.6, cy - r * 1.6), size=(r * 3.2, r * 3.2))
                 Color(1, 0.88, 0.30, 1)
             elif self.disabled:
-                Color(0.22, 0.06, 0.07, 1)
+                Color(0.62, 0.05, 0.10, 1)
             else:
-                Color(0.62, 0.08, 0.10, 1)
+                Color(0.92, 0.06, 0.13, 1)
             Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
             Color(1, 1, 1, 0.30)
             Ellipse(pos=(cx - r * 0.55, cy + r * 0.1), size=(r * 0.9, r * 0.6))
@@ -509,14 +511,63 @@ class TitleBar(BoxLayout):
         self.add_widget(Label(text=text, font_size=sp(24), bold=True, color=(0.28, 0.02, 0.06, 1)))
         self._shine = None
         self._t = 0.0
+        self._dots = []
+        self._phase = 0.0
         self.bind(pos=self.redraw, size=self.redraw)
         Clock.schedule_interval(self._tick, 1 / 30.0)
 
     def _tick(self, dt):
         self._t = (self._t + dt / 3.2) % 1.6
+        self._phase = (self._phase + dt * 16.0) % max(1, len(self._dots))
         self._move()
 
+    def _perimeter(self, n):
+        """n Punkte gleichmaessig auf dem Rand der abgerundeten Leiste."""
+        x, y = self.pos
+        w, h = self.size
+        r = h * 0.30
+        top, bot = y + h * 0.92, y + h * 0.08
+        straight_w, straight_h = w - 2 * r, (top - bot) - 2 * r
+        arc = math.pi * r / 2
+        segs = [(straight_w, "t"), (arc, "tr"), (straight_h, "r"), (arc, "br"),
+                (straight_w, "b"), (arc, "bl"), (straight_h, "l"), (arc, "tl")]
+        total = sum(sg[0] for sg in segs)
+        pts = []
+        for i in range(n):
+            d = total * i / n
+            for ln, kind in segs:
+                if d <= ln:
+                    f = d / ln if ln else 0
+                    if kind == "t":
+                        p = (x + r + f * straight_w, top)
+                    elif kind == "tr":
+                        a = math.pi / 2 - f * math.pi / 2
+                        p = (x + w - r + r * math.cos(a), top - r + r * math.sin(a))
+                    elif kind == "r":
+                        p = (x + w, top - r - f * straight_h)
+                    elif kind == "br":
+                        a = -f * math.pi / 2
+                        p = (x + w - r + r * math.cos(a), bot + r + r * math.sin(a))
+                    elif kind == "b":
+                        p = (x + w - r - f * straight_w, bot)
+                    elif kind == "bl":
+                        a = -math.pi / 2 - f * math.pi / 2
+                        p = (x + r + r * math.cos(a), bot + r + r * math.sin(a))
+                    elif kind == "l":
+                        p = (x, bot + r + f * straight_h)
+                    else:
+                        a = math.pi - f * math.pi / 2
+                        p = (x + r + r * math.cos(a), top - r + r * math.sin(a))
+                    pts.append(p)
+                    break
+                d -= ln
+        return pts
+
     def _move(self):
+        n = len(self._dots)
+        for i, (col, el) in enumerate(self._dots):
+            k = ((i - self._phase) % n) / float(n)          # 0 = Kopf des Lauflichts
+            col.a = max(0.18, 1.0 - k * 2.6)
         if self._shine is None:
             return
         x, y = self.pos
@@ -543,7 +594,13 @@ class TitleBar(BoxLayout):
                              (x + w - h * 1.35, 2), (x + w - h * 0.75, 3)):
                 Color(*((0.75, 0.02, 0.10, 1) if suit < 2 else (0.25, 0.02, 0.06, 1)))
                 draw_suit(suit, cx, y + h / 2 + dp(1), h * 0.42)
+        self._dots = []
+        d = dp(5.2)
         with self.canvas.after:
+            for px_, py_ in self._perimeter(36):
+                col = Color(1.0, 0.97, 0.80, 0.2)
+                el = Ellipse(pos=(px_ - d / 2, py_ - d / 2), size=(d, d))
+                self._dots.append((col, el))
             Color(1, 1, 1, 0.38)
             self._shine = Quad(points=[0, 0, 0, 0, 0, 0, 0, 0])
         self._move()
@@ -898,7 +955,7 @@ class Machine(BoxLayout):
         self._more_text = str(g.win * 2)
         self._pos = random.randrange(2)
         # immer schneller: Null, Zahl, Null, Zahl ... das Tempo steigt bei jedem Wechsel
-        state = {"dt": 0.24 * 0.88 ** min(g.rung, 5), "min": 0.045 * 0.9 ** min(g.rung, 5), "n": 0}
+        state = {"dt": 0.75 * 0.9 ** min(g.rung, 5), "min": 0.09, "n": 0}
 
         def run(dt):
             if not self.running:
@@ -908,7 +965,7 @@ class Machine(BoxLayout):
             state["n"] += 1
             if state["dt"] > 0.07 or state["n"] % 2 == 0:
                 self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.4)
-            state["dt"] = max(state["min"], state["dt"] * 0.84)
+            state["dt"] = max(state["min"], state["dt"] * 0.75)
             if state["n"] >= 7:                  # kein STOPP: nach 7 Wechseln stoppt es von selbst
                 self._ev = Clock.schedule_once(lambda dt: self.on_stop(), state["dt"])
                 return
