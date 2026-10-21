@@ -132,7 +132,7 @@ class Game:
         self.win = mult * self.stake
         if self.win:
             self.state = "result"
-            self.message = "%s! - NEHMEN oder RISIKO" % name
+            self.message = "%s!" % name
         else:
             self.state = "idle"
             self.message = "Leider nichts. Naechste Runde?"

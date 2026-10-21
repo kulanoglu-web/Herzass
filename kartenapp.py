@@ -363,12 +363,19 @@ class LadderBar(Widget):
 
 # ----------------------------------------------- Risiko: Null oder mehr ----
 class RiskFlip(Widget):
-    """Grosses Herz: zeigt abwechselnd die 0 (dunkel) und die Zahl (leuchtend)."""
+    """Grosses, pulsierendes Herz: 0 (dunkles Stahl-Herz) gegen die Zahl (feuriges Rot-Gold-Herz)."""
 
     def __init__(self, **kw):
         super().__init__(**kw)
         self.text, self.side, self.result = "", 0, None
+        self.t = 0.0
         self.bind(pos=self.redraw, size=self.redraw)
+        Clock.schedule_interval(self._tick, 1 / 30.0)
+
+    def _tick(self, dt):
+        self.t += dt
+        if self.text and self.parent is not None:
+            self.redraw()
 
     def reset(self):
         self.text, self.result = "", None
@@ -390,34 +397,34 @@ class RiskFlip(Widget):
         self.canvas.clear()
         x, y = self.pos
         w, h = self.size
-        s = min(h * 0.60, w * 0.5)
+        pulse = 1.0 + 0.06 * math.sin(self.t * 9.0)
+        s = min(h * 0.60, w * 0.5) * pulse
         cx, cy = x + w / 2, y + h * 0.52
         with self.canvas:
-            if self.text:
-                if self.side == 1:
-                    glow, rim, body, tcol = (1.0, 0.8, 0.2), GOLD, (1.0, 0.22, 0.18, 1), (1, 1, 1, 1)
-                else:
-                    glow, rim, body, tcol = (0.6, 0.0, 0.1), (0.55, 0.45, 0.2, 1), (0.16, 0.0, 0.04, 1), (1, 0.5, 0.5, 1)
-                if self.result == "more":
-                    glow, body = (1.0, 0.9, 0.3), (1.0, 0.55, 0.1, 1)
-                elif self.result == "zero":
-                    glow = (1.0, 0.1, 0.1)
-                Color(glow[0], glow[1], glow[2], 0.28)
-                draw_suit(0, cx, cy, s * 1.45)
-                Color(glow[0], glow[1], glow[2], 0.18)
-                draw_suit(0, cx, cy, s * 1.25)
-                Color(0.25, 0.15, 0.0, 1)
-                draw_suit(0, cx, cy - dp(2), s * 1.04)
-                Color(*rim)
-                draw_suit(0, cx, cy, s)
-                Color(*body)
-                draw_suit(0, cx, cy, s * 0.84)
-                Color(1, 1, 1, 0.30)
-                Ellipse(pos=(cx - s * 0.40, cy + s * 0.14), size=(s * 0.34, s * 0.22))
-                tex = text_texture(self.text, s * (0.42 if len(self.text) < 4 else 0.30), tcol)
-                Color(1, 1, 1, 1)
-                Rectangle(texture=tex, size=tex.size,
-                          pos=(cx - tex.width / 2, cy - tex.height / 2 + s * 0.05))
+            if not self.text:
+                return
+            if self.result == "more":
+                glow, layers, tcol = (1.0, 0.85, 0.2), [(1.0, 0.75, 0.1), (1.0, 0.55, 0.1), (1.0, 0.85, 0.35), (1.0, 0.97, 0.7)], (0.35, 0.02, 0.05, 1)
+            elif self.result == "zero":
+                glow, layers, tcol = (1.0, 0.1, 0.1), [(0.5, 0.0, 0.05), (0.8, 0.05, 0.08), (1.0, 0.2, 0.2), (1.0, 0.45, 0.4)], (1, 1, 1, 1)
+            elif self.side == 1:
+                glow, layers, tcol = (1.0, 0.6, 0.1), [(1.0, 0.8, 0.2), (0.85, 0.0, 0.10), (1.0, 0.12, 0.18), (1.0, 0.45, 0.35)], (1, 1, 1, 1)
+            else:
+                glow, layers, tcol = (0.3, 0.5, 1.0), [(0.62, 0.66, 0.78), (0.10, 0.12, 0.20), (0.20, 0.24, 0.38), (0.38, 0.45, 0.65)], (0.85, 0.9, 1, 1)
+            for k, a in ((1.55, 0.14), (1.35, 0.18), (1.18, 0.26)):
+                Color(glow[0], glow[1], glow[2], a)
+                draw_suit(0, cx, cy, s * k)
+            Color(0.2, 0.12, 0.0, 1)
+            draw_suit(0, cx, cy - dp(2), s * 1.05)
+            for scale, col in zip((1.0, 0.86, 0.70, 0.50), layers):
+                Color(col[0], col[1], col[2], 1)
+                draw_suit(0, cx, cy + (1.0 - scale) * s * 0.10, s * scale)
+            Color(1, 1, 1, 0.45)
+            Ellipse(pos=(cx - s * 0.40, cy + s * 0.14), size=(s * 0.32, s * 0.20))
+            tex = text_texture(self.text, s * (0.46 if len(self.text) < 4 else 0.32), tcol)
+            Color(1, 1, 1, 1)
+            Rectangle(texture=tex, size=tex.size,
+                      pos=(cx - tex.width / 2, cy - tex.height / 2 + s * 0.05))
 
 
 class RiskPanel(BoxLayout):
@@ -448,19 +455,22 @@ class HoldLamp(ButtonBehavior, Widget):
         r = min(w * 0.36, h * 0.34)
         cx, cy = x + w / 2, y + h * 0.66
         with self.canvas:
-            Color(0.95, 0.75, 0.25, 1)
-            Ellipse(pos=(cx - r * 1.18, cy - r * 1.18), size=(r * 2.36, r * 2.36))
+            Color(1, 1, 1, 1)
+            Ellipse(pos=(cx - r * 1.2, cy - r * 1.2), size=(r * 2.4, r * 2.4),
+                    texture=metal_texture(GOLD, 1.0))
             if self.lit:
-                Color(1, 0.85, 0.2, 0.30)
-                Ellipse(pos=(cx - r * 1.6, cy - r * 1.6), size=(r * 3.2, r * 3.2))
-                Color(1, 0.88, 0.30, 1)
+                Color(1, 0.85, 0.2, 0.35)
+                Ellipse(pos=(cx - r * 1.7, cy - r * 1.7), size=(r * 3.4, r * 3.4))
+                col = GOLD
             elif self.disabled:
-                Color(0.62, 0.05, 0.10, 1)
+                col = (0.80, 0.04, 0.10, 1)
             else:
-                Color(0.92, 0.06, 0.13, 1)
-            Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r))
-            Color(1, 1, 1, 0.30)
-            Ellipse(pos=(cx - r * 0.55, cy + r * 0.1), size=(r * 0.9, r * 0.6))
+                col = (1.0, 0.07, 0.14, 1)
+            Color(1, 1, 1, 1)
+            Ellipse(pos=(cx - r, cy - r), size=(2 * r, 2 * r),
+                    texture=metal_texture(col, 1.0))
+            Color(1, 1, 1, 0.55)
+            Ellipse(pos=(cx - r * 0.55, cy + r * 0.2), size=(r * 0.9, r * 0.5))
             tex = text_texture("HALTEN", sp(10), (0.9, 0.8, 0.5, 1) if not self.disabled
                                else (0.5, 0.45, 0.35, 1))
             Color(1, 1, 1, 1)
@@ -503,6 +513,46 @@ class GlossButton(Button):
                  width=dp(1))
 
 
+def perimeter(x, y, w, h, r, n):
+    """n Punkte gleichmaessig auf dem Rand eines abgerundeten Rechtecks."""
+    top, bot = y + h, y
+    straight_w, straight_h = w - 2 * r, h - 2 * r
+    arc = math.pi * r / 2
+    segs = [(straight_w, "t"), (arc, "tr"), (straight_h, "r"), (arc, "br"),
+            (straight_w, "b"), (arc, "bl"), (straight_h, "l"), (arc, "tl")]
+    total = sum(sg[0] for sg in segs)
+    pts = []
+    for i in range(n):
+        d = total * i / n
+        for ln, kind in segs:
+            if d <= ln:
+                f = d / ln if ln else 0
+                if kind == "t":
+                    p = (x + r + f * straight_w, top)
+                elif kind == "tr":
+                    a = math.pi / 2 - f * math.pi / 2
+                    p = (x + w - r + r * math.cos(a), top - r + r * math.sin(a))
+                elif kind == "r":
+                    p = (x + w, top - r - f * straight_h)
+                elif kind == "br":
+                    a = -f * math.pi / 2
+                    p = (x + w - r + r * math.cos(a), bot + r + r * math.sin(a))
+                elif kind == "b":
+                    p = (x + w - r - f * straight_w, bot)
+                elif kind == "bl":
+                    a = -math.pi / 2 - f * math.pi / 2
+                    p = (x + r + r * math.cos(a), bot + r + r * math.sin(a))
+                elif kind == "l":
+                    p = (x, bot + r + f * straight_h)
+                else:
+                    a = math.pi - f * math.pi / 2
+                    p = (x + r + r * math.cos(a), top - r + r * math.sin(a))
+                pts.append(p)
+                break
+            d -= ln
+    return pts
+
+
 class TitleBar(BoxLayout):
     """Goldene Metall-Leiste mit wanderndem Lichtreflex."""
 
@@ -520,48 +570,6 @@ class TitleBar(BoxLayout):
         self._t = (self._t + dt / 3.2) % 1.6
         self._phase = (self._phase + dt * 16.0) % max(1, len(self._dots))
         self._move()
-
-    def _perimeter(self, n):
-        """n Punkte gleichmaessig auf dem Rand der abgerundeten Leiste."""
-        x, y = self.pos
-        w, h = self.size
-        r = h * 0.30
-        top, bot = y + h * 0.92, y + h * 0.08
-        straight_w, straight_h = w - 2 * r, (top - bot) - 2 * r
-        arc = math.pi * r / 2
-        segs = [(straight_w, "t"), (arc, "tr"), (straight_h, "r"), (arc, "br"),
-                (straight_w, "b"), (arc, "bl"), (straight_h, "l"), (arc, "tl")]
-        total = sum(sg[0] for sg in segs)
-        pts = []
-        for i in range(n):
-            d = total * i / n
-            for ln, kind in segs:
-                if d <= ln:
-                    f = d / ln if ln else 0
-                    if kind == "t":
-                        p = (x + r + f * straight_w, top)
-                    elif kind == "tr":
-                        a = math.pi / 2 - f * math.pi / 2
-                        p = (x + w - r + r * math.cos(a), top - r + r * math.sin(a))
-                    elif kind == "r":
-                        p = (x + w, top - r - f * straight_h)
-                    elif kind == "br":
-                        a = -f * math.pi / 2
-                        p = (x + w - r + r * math.cos(a), bot + r + r * math.sin(a))
-                    elif kind == "b":
-                        p = (x + w - r - f * straight_w, bot)
-                    elif kind == "bl":
-                        a = -math.pi / 2 - f * math.pi / 2
-                        p = (x + r + r * math.cos(a), bot + r + r * math.sin(a))
-                    elif kind == "l":
-                        p = (x, bot + r + f * straight_h)
-                    else:
-                        a = math.pi - f * math.pi / 2
-                        p = (x + r + r * math.cos(a), top - r + r * math.sin(a))
-                    pts.append(p)
-                    break
-                d -= ln
-        return pts
 
     def _move(self):
         n = len(self._dots)
@@ -597,7 +605,7 @@ class TitleBar(BoxLayout):
         self._dots = []
         d = dp(5.2)
         with self.canvas.after:
-            for px_, py_ in self._perimeter(36):
+            for px_, py_ in perimeter(x, y + h * 0.08, w, h * 0.84, h * 0.30, 36):
                 col = Color(1.0, 0.97, 0.80, 0.2)
                 el = Ellipse(pos=(px_ - d / 2, py_ - d / 2), size=(d, d))
                 self._dots.append((col, el))
@@ -661,6 +669,7 @@ class Machine(BoxLayout):
         self._mode = None
         self.running = False
         self.pause = False
+        self.resolving = False
         self.risk_round = 0
         self._auto_ev = None
         self._ev = None
@@ -683,7 +692,10 @@ class Machine(BoxLayout):
         with self.canvas.after:
             self._flash_color = Color(1, 1, 1, 0)
             self._flash_rect = Rectangle(pos=self.pos, size=self.size)
+        self._fdots = []
+        self._fphase = 0.0
         self.bind(pos=self._layout_bg, size=self._layout_bg)
+        Clock.schedule_interval(self._frame_tick, 1 / 30.0)
 
         # Anzeigen
         top = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(8))
@@ -780,6 +792,25 @@ class Machine(BoxLayout):
         self._frame.rounded_rectangle = (x + dp(3), y + dp(3), w - dp(6), h - dp(6), dp(14))
         self._frame2.rounded_rectangle = (x + dp(8), y + dp(8), w - dp(16), h - dp(16), dp(10))
         self._flash_rect.pos, self._flash_rect.size = self.pos, self.size
+        for col, el in self._fdots:
+            self.canvas.after.remove(col)
+            self.canvas.after.remove(el)
+        self._fdots = []
+        d = dp(5.5)
+        with self.canvas.after:
+            for px_, py_ in perimeter(x + dp(3), y + dp(3), w - dp(6), h - dp(6), dp(14), 110):
+                col = Color(1.0, 0.97, 0.80, 0.2)
+                el = Ellipse(pos=(px_ - d / 2, py_ - d / 2), size=(d, d))
+                self._fdots.append((col, el))
+
+    def _frame_tick(self, dt):
+        n = len(self._fdots)
+        if not n:
+            return
+        self._fphase = (self._fphase + dt * 22.0) % n
+        for i, (col, el) in enumerate(self._fdots):
+            k = ((i - self._fphase) % n) / float(n)
+            col.a = max(0.12, 1.0 - k * 3.0)
 
     def sparkle(self, n=26):
         parts = []
@@ -877,10 +908,20 @@ class Machine(BoxLayout):
             self.animate(changing)
 
     def on_take(self):
+        """NEHMEN geht jederzeit (auch waehrend das Risiko laeuft) - ausser waehrend der Aufloesung."""
+        if self.resolving:
+            return
         if self._auto_ev is not None:
             self._auto_ev.cancel()
             self._auto_ev = None
         self.pause = False
+        if self.running:
+            self.running = False
+            if self._ev is not None:
+                self._ev.cancel()
+            self.sfx.stop("risk_loop")
+            self.frozen = None
+            self._busy = False
         if not self._busy and self.game.take():
             self.sfx.play("coins")
             self._save()
@@ -915,6 +956,8 @@ class Machine(BoxLayout):
                     mult = g.win // max(1, g.stake)
                     self.sfx.play("win_big" if mult >= 10 else "win_small")
                     self.flash((1.0, 0.85, 0.3))
+                    self.risk_round = 0
+                    self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 1.6)
                 elif g.state == "idle" and g.win == 0 and g.win_name is None:
                     self.sfx.play("lose", 0.35)
                 self.refresh()
@@ -929,10 +972,7 @@ class Machine(BoxLayout):
         if self.running:
             self.on_stop()
             return
-        if self._busy or self.pause or not g.risk_start():
-            return
-        self.risk_round = 0
-        self._begin_round()
+        return
 
     def _next_round(self):
         self._auto_ev = None
@@ -955,7 +995,7 @@ class Machine(BoxLayout):
         self._more_text = str(g.win * 2)
         self._pos = random.randrange(2)
         # immer schneller: Null, Zahl, Null, Zahl ... das Tempo steigt bei jedem Wechsel
-        state = {"dt": 0.75 * 0.9 ** min(g.rung, 5), "min": 0.09, "n": 0}
+        state = {"dt": 1.1 * 0.93 ** min(g.rung, 5), "min": 0.12, "n": 0}
 
         def run(dt):
             if not self.running:
@@ -965,18 +1005,20 @@ class Machine(BoxLayout):
             state["n"] += 1
             if state["dt"] > 0.07 or state["n"] % 2 == 0:
                 self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.4)
-            state["dt"] = max(state["min"], state["dt"] * 0.75)
+            state["dt"] = max(state["min"], state["dt"] * 0.82)
             if state["n"] >= 7:                  # kein STOPP: nach 7 Wechseln stoppt es von selbst
                 self._ev = Clock.schedule_once(lambda dt: self.on_stop(), state["dt"])
                 return
             self._ev = Clock.schedule_once(run, state["dt"])
 
+        track.show(self._pos, self._more_text if self._pos else "0")
         self._ev = Clock.schedule_once(run, state["dt"])
 
     def on_stop(self):
         if not self.running:
             return
         self.running = False
+        self.resolving = True
         if self._ev is not None:
             self._ev.cancel()
         g = self.game
@@ -1020,12 +1062,13 @@ class Machine(BoxLayout):
         def finish(dt):
             self.frozen = None
             self._busy = False
+            self.resolving = False
             if mult_box["m"] and g.state == "risk":
-                # weiter: die naechste Runde laeuft von selbst, bis NEHMEN gedrueckt wird
+                # weiter: die naechste Runde laeuft sofort von selbst
                 self.risk_round += 1
                 self.pause = True
                 self.refresh()
-                self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 2.4)
+                self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 0.9)
                 return
             self.pause = False
             self._save()
@@ -1060,15 +1103,14 @@ class Machine(BoxLayout):
             if in_risk:
                 self.risk_panel.track.reset()
         if self.pause:
-            self.msg.text = "Weiter geht's - oder NEHMEN!"
+            self.msg.text = "Weiter ..."
         elif in_risk and not self.frozen:
-            self.msg.text = "RISIKO oder NEHMEN"
+            self.msg.text = "Gleich geht's los - STOPP bei der Zahl!"
 
-        self.btn_risk.disabled = self.pause or (bool(self.frozen) and not self.running) or (
-            not self.frozen and g.state not in ("result", "risk"))
+        self.btn_risk.disabled = not self.running
         self.btn_risk.set_label("STOPP" if self.running else "RISIKO",
                                 GOLD if self.running else (0.92, 0.06, 0.13, 1))
-        self.btn_take.disabled = bool(self.frozen) or g.state not in ("result", "risk")
+        self.btn_take.disabled = self.resolving or g.state not in ("result", "risk")
         self.btn_main.disabled = in_risk
         self.btn_main.text = "ZIEHUNG" if g.state == "held" else (
             "NEU STARTEN" if g.credit < g.stake else "START")
