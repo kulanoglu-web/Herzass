@@ -313,7 +313,7 @@ class LadderBar(BoxLayout):
 
     def __init__(self, **kw):
         super().__init__(orientation="horizontal", spacing=dp(2), **kw)
-        self.cells = [HeartCell("x%d" % m) for m in LADDER]
+        self.cells = [HeartCell("0")] + [HeartCell("x%d" % m) for m in LADDER]
         for c in self.cells:
             self.add_widget(c)
         self.rung, self.active, self.phase = 0, False, False
@@ -326,7 +326,8 @@ class LadderBar(BoxLayout):
 
     def show(self, rung, active):
         self.rung, self.active = rung, active
-        for i, c in enumerate(self.cells):
+        self.cells[0].set("off")                      # NULL am Anfang, gleich gross wie die anderen
+        for i, c in enumerate(self.cells[1:]):
             if active and i == rung:
                 c.set("active", self.phase)
             elif active and i < rung:
@@ -802,25 +803,26 @@ class Machine(BoxLayout):
         self.msg.text = "Stoppe die Anzeige auf dem Gewinn!"
         self.refresh()
         panel.info.text = "STOPP druecken!"
-        panel.hint.text = "Risiko 1:1 - je hoeher die Stufe, desto schneller"
+        panel.hint.text = "Null, Zahl, Null, Zahl ... es wird immer schneller!"
         self.sfx.play("risk_start")
         Clock.schedule_once(lambda dt: self.running and self.sfx.play("risk_loop", 0.8, loop=True), 0.5)
         self._more_text = str(g.win * 2)
         self._pos = random.randrange(2)
-        speed = max(0.04, 0.16 * 0.80 ** g.rung)
-        count = {"n": 0}
+        # immer schneller: Null, Zahl, Null, Zahl ... das Tempo steigt bei jedem Wechsel
+        state = {"dt": max(0.22, 0.50 * 0.85 ** g.rung), "min": max(0.03, 0.06 * 0.85 ** g.rung), "n": 0}
 
         def run(dt):
             if not self.running:
                 return
             self._pos = 1 - self._pos
             track.show(self._pos, self._more_text if self._pos else "0")
-            count["n"] += 1
-            if speed > 0.07 or count["n"] % 2 == 0:
+            state["n"] += 1
+            if state["dt"] > 0.07 or state["n"] % 2 == 0:
                 self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.4)
-            self._ev = Clock.schedule_once(run, speed)
+            state["dt"] = max(state["min"], state["dt"] * 0.94)
+            self._ev = Clock.schedule_once(run, state["dt"])
 
-        self._ev = Clock.schedule_once(run, speed)
+        self._ev = Clock.schedule_once(run, state["dt"])
 
     def on_stop(self):
         if not self.running:
