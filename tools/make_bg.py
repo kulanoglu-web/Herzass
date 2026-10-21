@@ -1,24 +1,22 @@
-"""Erzeugt den Hintergrund img/bg.png (dunkles Blau mit Vignette und feinem Raster)."""
+"""Erzeugt den Hintergrund img/bg.png: heller Blau-Tuerkis-Verlauf mit weichem Lichtfleck."""
 import math
 import os
-import random
 
 from PIL import Image
 
 W, H = 360, 800
-rng = random.Random(3)
 img = Image.new("RGB", (W, H))
 px = img.load()
+top, bot = (34, 110, 190), (14, 40, 100)
 for y in range(H):
+    t = y / (H - 1.0)
     for x in range(W):
-        dx, dy = (x - W / 2) / (W / 2), (y - H * 0.42) / (H * 0.6)
-        d = min(1.0, math.hypot(dx, dy))
-        k = (1 - d) ** 1.4
-        r, g, b = 4 + 22 * k, 6 + 30 * k, 18 + 62 * k
-        if (x + y) % 6 == 0:
-            r, g, b = r * 1.25, g * 1.25, b * 1.25
-        n = rng.random() * 3
-        px[x, y] = (int(r + n), int(g + n), int(b + n))
+        dx, dy = (x - W * 0.5) / (W * 0.7), (y - H * 0.28) / (H * 0.5)
+        glow = max(0.0, 1 - math.hypot(dx, dy)) ** 1.6
+        r = top[0] + (bot[0] - top[0]) * t + 55 * glow
+        g = top[1] + (bot[1] - top[1]) * t + 70 * glow
+        b = top[2] + (bot[2] - top[2]) * t + 60 * glow
+        px[x, y] = (min(255, int(r)), min(255, int(g)), min(255, int(b)))
 os.makedirs("img", exist_ok=True)
 img.save("img/bg.png", optimize=True)
 print("img/bg.png", img.size)

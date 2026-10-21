@@ -1,7 +1,7 @@
 import random
 import unittest
 
-from logic import Game, evaluate, new_deck, PAY, LADDER
+from logic import Game, evaluate, new_deck, PAY, LADDER, RISK_CELLS
 
 
 def c(*pairs):
@@ -53,37 +53,38 @@ class GameTest(unittest.TestCase):
         self.assertEqual(g.credit, 130)
         self.assertEqual(g.state, "idle")
 
-    def test_risk_null_oder_mehr(self):
-        class R:
-            def __init__(self, v):
-                self.v = v
+    def test_risk_cells_fair(self):
+        self.assertEqual(RISK_CELLS[0], 0)           # NULL am Anfang
+        self.assertEqual(RISK_CELLS[-1], 4)          # groesste Vermehrung ganz rechts
+        self.assertEqual(sorted(RISK_CELLS), RISK_CELLS)
+        self.assertAlmostEqual(sum(RISK_CELLS) / float(len(RISK_CELLS)), 1.0)
 
-            def random(self):
-                return self.v
-        g = Game(credit=100, stake=10, rng=R(0.1))      # 0.1 -> mehr
+    def test_risk_null(self):
+        g = Game(credit=100, stake=10)
         g.state, g.win = "result", 20
-        self.assertTrue(g.risk_play())
+        self.assertEqual(g.risk_resolve(0), 0)
+        self.assertEqual((g.win, g.state), (0, "idle"))
+
+    def test_risk_mehr_und_x4(self):
+        g = Game(credit=100, stake=10)
+        g.state, g.win = "result", 20
+        self.assertEqual(g.risk_resolve(8), 2)
         self.assertEqual((g.win, g.state, g.rung), (40, "risk", 1))
-        g.rng = R(0.9)                                  # 0.9 -> null
-        self.assertFalse(g.risk_play())
-        self.assertEqual((g.win, g.state, g.credit), (0, "idle", 100))
+        self.assertEqual(g.risk_resolve(len(RISK_CELLS) - 1), 4)
+        self.assertEqual((g.win, g.rung), (160, 3))
 
     def test_risk_nicht_moeglich(self):
-        g = Game(credit=100, stake=10)
-        self.assertIsNone(g.risk_play())
-        g.state, g.win = "held", 10
-        self.assertIsNone(g.risk_play())
+        g = Game()
+        self.assertIsNone(g.risk_resolve(8))
+        self.assertFalse(g.risk_start())
 
     def test_top_rung_pays_out(self):
-        class Win:
-            def random(self):
-                return 0.0
-        g = Game(credit=0, stake=10, rng=Win())
-        g.state, g.win = "result", 10
-        for _ in range(len(LADDER) - 1):
-            g.risk_play()
+        g = Game(credit=0, stake=10)
+        g.state, g.win = "risk", 10
+        for _ in range(3):
+            g.risk_resolve(len(RISK_CELLS) - 1)
         self.assertEqual(g.state, "idle")
-        self.assertEqual(g.credit, 10 * 2 ** (len(LADDER) - 1))
+        self.assertEqual(g.credit, 10 * 4 ** 3)
 
     def test_simulation_conserves_credit_rules(self):
         rng = random.Random(42)

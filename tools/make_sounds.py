@@ -207,7 +207,44 @@ def build():
         (0.02, lowpass(tone(311.1, 1.0, "saw", 0.26, decay=2.2, detune=0.008), 1400)),
         (0.02, lowpass(tone(370.0, 1.0, "saw", 0.24, decay=2.2, detune=0.008), 1400)),
     ), 0.3, 0.8))
-    save("risk_riser", riser(4.2))
+
+    # Spannungsschleife (2 s, nahtlos): dunkler Brummton, Herzschlag, flirrende Hoehen
+    L = 2.0
+    n = int(SR * L)
+    drone = [0.0] * n
+    for f, v in ((55.0, 0.55), (82.5, 0.40), (110.5, 0.25)):
+        for i in range(n):
+            t = i / SR
+            lfo = 0.65 + 0.35 * math.sin(TAU * 2.0 * t)       # 2 ganze Schwingungen in 2 s
+            drone[i] += math.sin(TAU * f * t) * v * lfo
+    shimmer = [0.0] * n
+    for f in (880.0, 1318.5, 1760.0):
+        for i in range(n):
+            t = i / SR
+            shimmer[i] += math.sin(TAU * f * t) * 0.045 * (0.5 + 0.5 * math.sin(TAU * 8.0 * t)) ** 2
+    beats = []
+    for b0 in (0.0, 1.0):
+        beats.append((b0, tone(58, 0.22, "sine", 1.0, decay=17)))
+        beats.append((b0 + 0.20, tone(50, 0.26, "sine", 0.8, decay=15)))
+    for k in range(8):
+        beats.append((0.25 * k, mix((0, tone(300, 0.03, "tri", 0.12, decay=90)))))
+    loop = mix((0, drone), (0, shimmer), *beats)[:n]
+    save("risk_loop", loop)
+    # Stopp-Schlag
+    save("risk_stop", reverb(mix(
+        (0, tone(120, 0.35, "sine", 1.0, decay=11, slide=-70)),
+        (0, lowpass(noise(0.08, 0.8, 45), 2500)),
+        (0, tone(880, 0.12, "square", 0.18, decay=60)),
+    ), 0.22, 0.6))
+    # Wartespannung nach dem Auslaufen: tiefes Anschwellen mit Flirren
+    hold = []
+    for i in range(int(SR * 1.7)):
+        t = i / SR
+        p = t / 1.7
+        hold.append((math.sin(TAU * (70 + 40 * p) * t) * 0.6 +
+                     math.sin(TAU * (700 + 900 * p) * t) * 0.10 * p) * (0.15 + 0.85 * p ** 1.5) *
+                    (0.7 + 0.3 * math.sin(TAU * (4 + 10 * p) * t)))
+    save("risk_hold", hold)
     save("risk_tick_lo", mix((0, tone(430, 0.06, "sine", 0.7, decay=55)), (0, noise(0.008, 0.35, 500))))
     save("risk_tick_hi", mix((0, tone(1180, 0.06, "sine", 0.55, decay=60)),
                              (0, tone(1770, 0.05, "tri", 0.2, decay=70)), (0, noise(0.008, 0.3, 500))))

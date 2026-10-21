@@ -28,6 +28,8 @@ PAY = dict(PAYTABLE)
 
 # Risikoleiter: nach jedem richtigen Tipp verdoppelt sich der Gewinn
 LADDER = [1, 2, 4, 8, 16, 32, 64]
+# Risiko-Lauflicht: links NULL, nach rechts waechst die Vermehrung. Fair bei Zufallsstopp.
+RISK_CELLS = [0] * 7 + [2] * 4 + [4]
 STAKES = [5, 10, 20, 50]
 START_CREDIT = 200
 
@@ -147,29 +149,35 @@ class Game:
         self.state = "idle"
         return True
 
-    def risk_play(self):
-        """Null oder mehr: mit 50 % verdoppelt sich der Gewinn, sonst ist er weg.
-        Gibt True (mehr), False (null) oder None (nicht moeglich) zurueck."""
-        if self.state not in ("result", "risk") or self.win <= 0:
+    def risk_start(self):
+        """Prueft, ob ein Risiko moeglich ist (der Spieler stoppt danach selbst das Lauflicht)."""
+        return self.state in ("result", "risk") and self.win > 0
+
+    def risk_resolve(self, cell):
+        """Das Lauflicht wurde auf Feld `cell` gestoppt. NULL = Gewinn weg, sonst wird
+        der Gewinn mit dem Wert des Feldes (x2 oder x4) vervielfacht.
+        Gibt den Faktor zurueck (0 = verloren) oder None (nicht moeglich)."""
+        if not self.risk_start():
             return None
-        if self.rng.random() < 0.5:
-            self.rung += 1
-            self.win *= 2
-            if self.rung >= len(LADDER) - 1:
-                self.credit += self.win
-                self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
-                self.win = 0
-                self.rung = 0
-                self.state = "idle"
-            else:
-                self.state = "risk"
-                self.message = "MEHR! Jetzt %d Punkte" % self.win
-            return True
-        self.message = "NULL - Gewinn verloren"
-        self.win = 0
-        self.rung = 0
-        self.state = "idle"
-        return False
+        mult = RISK_CELLS[cell]
+        if mult == 0:
+            self.message = "NULL - Gewinn verloren"
+            self.win = 0
+            self.rung = 0
+            self.state = "idle"
+            return 0
+        self.win *= mult
+        self.rung += 2 if mult == 4 else 1
+        if self.rung >= len(LADDER) - 1:
+            self.credit += self.win
+            self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
+            self.win = 0
+            self.rung = 0
+            self.state = "idle"
+        else:
+            self.state = "risk"
+            self.message = "MEHR x%d! Jetzt %d Punkte" % (mult, self.win)
+        return mult
 
     def reset(self):
         self.credit = START_CREDIT
