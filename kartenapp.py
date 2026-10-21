@@ -314,23 +314,24 @@ class LadderBar(Widget):
         self.cells = [HeartCell("0")] + [HeartCell("x%d" % m) for m in LADDER]
         for c in self.cells:
             self.add_widget(c)
-        self.rung, self.active, self.phase = 0, False, False
+        self.rung, self.active, self.phase, self.zero = 0, False, False, False
         self.bind(pos=self._layout, size=self._layout)
         Clock.schedule_interval(self._blink, 0.35)
 
     def _slots(self):
+        """Schlange von unten nach oben: Reihe 1 links->rechts, Reihe 2 rechts->links, ..."""
         n = len(self.cells)
-        per = (n + 1) // 2                  # untere Reihe
+        per = 3
+        rows = (n + per - 1) // per
         x, y = self.pos
         w, h = self.size
-        cw, ch = w / per, h / 2
+        cw, ch = w / (per + 0.0), h / rows
         out = []
         for i in range(n):
-            if i < per:
-                out.append((x + i * cw, y, cw, ch))
-            else:
-                j = per - 1 - (i - per)
-                out.append((x + j * cw + cw * 0.0, y + ch, cw, ch))
+            r, c = divmod(i, per)
+            if r % 2 == 1:
+                c = per - 1 - c
+            out.append((x + c * cw, y + r * ch, cw, ch))
         return out
 
     def _layout(self, *_):
@@ -349,9 +350,14 @@ class LadderBar(Widget):
         if self.active:
             self.show(self.rung, self.active)
 
+    def set_zero(self, on):
+        if on != self.zero:
+            self.zero = on
+            self.show(self.rung, self.active)
+
     def show(self, rung, active):
         self.rung, self.active = rung, active
-        self.cells[0].set("off")                       # Herz mit NULL am Anfang
+        self.cells[0].set("active", True) if self.zero else self.cells[0].set("off")
         for i, c in enumerate(self.cells[1:]):
             if active and i == rung:
                 c.set("active", self.phase)
@@ -370,7 +376,7 @@ class RiskFlip(Widget):
         self.text, self.side, self.result = "", 0, None
         self.t = 0.0
         self.bind(pos=self.redraw, size=self.redraw)
-        Clock.schedule_interval(self._tick, 1 / 30.0)
+        Clock.schedule_interval(self._tick, 1 / 24.0)
 
     def _tick(self, dt):
         self.t += dt
@@ -564,7 +570,7 @@ class TitleBar(BoxLayout):
         self._dots = []
         self._phase = 0.0
         self.bind(pos=self.redraw, size=self.redraw)
-        Clock.schedule_interval(self._tick, 1 / 30.0)
+        Clock.schedule_interval(self._tick, 1 / 24.0)
 
     def _tick(self, dt):
         self._t = (self._t + dt / 3.2) % 1.6
@@ -695,7 +701,7 @@ class Machine(BoxLayout):
         self._fdots = []
         self._fphase = 0.0
         self.bind(pos=self._layout_bg, size=self._layout_bg)
-        Clock.schedule_interval(self._frame_tick, 1 / 30.0)
+        Clock.schedule_interval(self._frame_tick, 1 / 24.0)
 
         # Anzeigen
         top = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(8))
@@ -712,7 +718,7 @@ class Machine(BoxLayout):
         self.add_widget(top)
 
         self.add_widget(TitleBar("POKERHERZ", size_hint_y=None, height=dp(44)))
-        self.ladder = LadderBar(size_hint_y=None, height=dp(86))
+        self.ladder = LadderBar(size_hint_y=None, height=dp(128))
         self.add_widget(self.ladder)
 
         self.msg = Label(text="", font_size=sp(15), color=(0.95, 0.95, 0.85, 1),
@@ -798,7 +804,7 @@ class Machine(BoxLayout):
         self._fdots = []
         d = dp(5.5)
         with self.canvas.after:
-            for px_, py_ in perimeter(x + dp(3), y + dp(3), w - dp(6), h - dp(6), dp(14), 110):
+            for px_, py_ in perimeter(x + dp(3), y + dp(3), w - dp(6), h - dp(6), dp(14), 70):
                 col = Color(1.0, 0.97, 0.80, 0.2)
                 el = Ellipse(pos=(px_ - d / 2, py_ - d / 2), size=(d, d))
                 self._fdots.append((col, el))
@@ -807,7 +813,7 @@ class Machine(BoxLayout):
         n = len(self._fdots)
         if not n:
             return
-        self._fphase = (self._fphase + dt * 22.0) % n
+        self._fphase = (self._fphase + dt * 14.0) % n
         for i, (col, el) in enumerate(self._fdots):
             k = ((i - self._fphase) % n) / float(n)
             col.a = max(0.12, 1.0 - k * 3.0)
@@ -957,7 +963,7 @@ class Machine(BoxLayout):
                     self.sfx.play("win_big" if mult >= 10 else "win_small")
                     self.flash((1.0, 0.85, 0.3))
                     self.risk_round = 0
-                    self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 1.6)
+                    self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 0.9)
                 elif g.state == "idle" and g.win == 0 and g.win_name is None:
                     self.sfx.play("lose", 0.35)
                 self.refresh()
@@ -1001,7 +1007,8 @@ class Machine(BoxLayout):
             if not self.running:
                 return
             self._pos = 1 - self._pos
-            track.show(self._pos, self._more_text if self._pos else "0")
+            track.show(self._pos, self._more_text if self._pos else "")
+            self.ladder.set_zero(self._pos == 0)
             state["n"] += 1
             if state["dt"] > 0.07 or state["n"] % 2 == 0:
                 self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.4)
@@ -1011,7 +1018,8 @@ class Machine(BoxLayout):
                 return
             self._ev = Clock.schedule_once(run, state["dt"])
 
-        track.show(self._pos, self._more_text if self._pos else "0")
+        track.show(self._pos, self._more_text if self._pos else "")
+        self.ladder.set_zero(self._pos == 0)
         self._ev = Clock.schedule_once(run, state["dt"])
 
     def on_stop(self):
@@ -1029,18 +1037,20 @@ class Machine(BoxLayout):
         self.msg.text = "Und ...?"
         self.refresh()
         side = self._pos
-        text = self._more_text if side else "0"
+        text = self._more_text if side else ""
 
         def blink(k):
             if k % 2 == 0:
                 track.show(side, text)
+                self.ladder.set_zero(side == 0)
                 self.sfx.play("heart", 0.8)
             else:
                 track.blank()
-            if k >= 6:
+                self.ladder.set_zero(False)
+            if k >= 3:
                 reveal()
             else:
-                Clock.schedule_once(lambda dt: blink(k + 1), 0.26)
+                Clock.schedule_once(lambda dt: blink(k + 1), 0.2)
 
         mult_box = {"m": 0}
 
@@ -1057,24 +1067,26 @@ class Machine(BoxLayout):
                 self.sfx.play("risk_lose")
                 self.flash((1.0, 0.1, 0.1))
                 self.msg.text = "NULL!"
-            Clock.schedule_once(finish, 1.8)
+            self.ladder.set_zero(side == 0)
+            Clock.schedule_once(finish, 0.9)
 
         def finish(dt):
             self.frozen = None
             self._busy = False
             self.resolving = False
+            self.ladder.set_zero(False)
             if mult_box["m"] and g.state == "risk":
                 # weiter: die naechste Runde laeuft sofort von selbst
                 self.risk_round += 1
                 self.pause = True
                 self.refresh()
-                self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 0.9)
+                self._auto_ev = Clock.schedule_once(lambda dt: self._next_round(), 0.35)
                 return
             self.pause = False
             self._save()
             self.refresh()
 
-        Clock.schedule_once(lambda dt: blink(0), 0.2)
+        Clock.schedule_once(lambda dt: blink(0), 0.1)
 
     # --- Anzeige ----------------------------------------------------------
     def refresh(self):
