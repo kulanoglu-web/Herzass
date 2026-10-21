@@ -28,8 +28,8 @@ PAY = dict(PAYTABLE)
 
 # Risikoleiter: nach jedem richtigen Tipp verdoppelt sich der Gewinn
 LADDER = [1, 2, 4, 8, 16, 32, 64]
-# Risiko-Lauflicht: links NULL, nach rechts waechst die Vermehrung. Fair bei Zufallsstopp.
-RISK_CELLS = [0] * 7 + [2] * 4 + [4]
+# Risiko-Lauflicht: gleich grosse Felder, links NULL, rechts die andere Seite (x2).
+RISK_CELLS = [0, 0, 0, 2, 2, 2]
 STAKES = [5, 10, 20, 50]
 START_CREDIT = 200
 
@@ -167,7 +167,7 @@ class Game:
             self.state = "idle"
             return 0
         self.win *= mult
-        self.rung += 2 if mult == 4 else 1
+        self.rung += 1
         if self.rung >= len(LADDER) - 1:
             self.credit += self.win
             self.message = "Hoechste Stufe! %d Punkte uebernommen" % self.win
