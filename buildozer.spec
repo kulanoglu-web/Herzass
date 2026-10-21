@@ -1,5 +1,5 @@
 [app]
-title = Kartenwalzen
+title = Pokerherz
 package.name = kartenwalzen
 package.domain = org.example
 source.dir = .

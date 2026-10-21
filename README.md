@@ -1,4 +1,4 @@
-# Kartenwalzen (Spielgeld)
+# Pokerherz (Spielgeld)
 
 Walzen-Kartenspiel: fünf Karten, Walzen halten, einmal nachziehen. Gewinne kann man
 nehmen oder bei "Risiko" wagen: Das Lauflicht entscheidet zwischen NULL (alles weg)
