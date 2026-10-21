@@ -283,19 +283,21 @@ class HeartCell(Widget):
             if self.state == "active" and self.glow:
                 Color(1, 0.85, 0.2, 0.40)
                 draw_suit(0, cx, cy, s * 1.4)
-            Color(0.35, 0.22, 0.02, 1)
-            draw_suit(0, cx, cy - dp(1.5), s * 1.05)
-            Color(*GOLD)                               # Goldrand
+            Color(0.30, 0.18, 0.08, 1)
+            draw_suit(0, cx, cy - dp(1.5), s * 1.06)
+            Color(0.80, 0.64, 0.44, 1)                 # braun-goldener Rand wie am Original
             draw_suit(0, cx, cy, s)
+            Color(0.95, 0.82, 0.60, 1)
+            draw_suit(0, cx, cy + dp(0.6), s * 0.93)
             if self.state == "active":
-                Color(1.0, 0.95, 0.55, 1) if self.glow else Color(1.0, 0.55, 0.12, 1)
-                tcol = INK
+                Color(1.0, 0.92, 0.35, 1) if self.glow else Color(1.0, 0.62, 0.10, 1)
+                tcol = (0.35, 0.02, 0.02, 1)
             elif self.state == "passed":
                 Color(1.0, 0.35, 0.35, 1)
                 tcol = (1, 1, 1, 1)
             else:
-                Color(0.92, 0.06, 0.13, 1)
-                tcol = (1, 1, 1, 1)
+                Color(0.86, 0.08, 0.10, 1)
+                tcol = (1.0, 0.93, 0.70, 1)
             draw_suit(0, cx, cy, s * 0.80)
             Color(1, 1, 1, 0.30)
             Ellipse(pos=(cx - s * 0.38, cy + s * 0.12), size=(s * 0.30, s * 0.20))
@@ -319,31 +321,45 @@ class LadderBar(Widget):
         Clock.schedule_interval(self._blink, 0.35)
 
     def _slots(self):
-        """Schlange von unten nach oben: Reihe 1 links->rechts, Reihe 2 rechts->links, ..."""
+        """Herzen auf einer Kurve wie am Original: unten (Start) -> links hoch -> oben."""
         n = len(self.cells)
-        per = 3
-        rows = (n + per - 1) // per
         x, y = self.pos
         w, h = self.size
-        cw, ch = w / (per + 0.0), h / rows
+        hs = min(w / 7.2, h / 3.3)             # Herzgroesse
+        x0, y0 = x + w * 0.66, y + h * 0.5
+        rx, ry = w * 0.58 - hs * 0.5, h * 0.5 - hs * 0.62
+        dense = []
+        for k in range(241):
+            t = math.radians(278 - k * 186.0 / 240)
+            dense.append((x0 + rx * math.cos(t), y0 + ry * math.sin(t)))
+        lens = [0.0]
+        for k in range(1, len(dense)):
+            lens.append(lens[-1] + math.hypot(dense[k][0] - dense[k - 1][0],
+                                              dense[k][1] - dense[k - 1][1]))
         out = []
-        for i in range(n):
-            r, c = divmod(i, per)
-            if r % 2 == 1:
-                c = per - 1 - c
-            out.append((x + c * cw, y + r * ch, cw, ch))
+        for i in range(n):                   # gleiche Abstaende entlang der Kurve
+            target = lens[-1] * i / (n - 1)
+            k = min(range(len(lens)), key=lambda j: abs(lens[j] - target))
+            cx, cy = dense[k]
+            out.append((cx - hs * 0.55, cy - hs * 0.55, hs * 1.1, hs * 1.1))
         return out
 
     def _layout(self, *_):
-        for c, (cx, cy, cw, ch) in zip(self.cells, self._slots()):
+        slots = self._slots()
+        for c, (cx, cy, cw, ch) in zip(self.cells, slots):
             c.pos, c.size = (cx, cy), (cw, ch)
         self.canvas.before.clear()
         pts = []
-        for cx, cy, cw, ch in self._slots():
+        for cx, cy, cw, ch in slots:
             pts += [cx + cw / 2, cy + ch / 2]
         with self.canvas.before:
-            Color(1.0, 0.78, 0.2, 0.30)
-            Line(points=pts, width=dp(3), joint="round", cap="round")
+            # gelb-oranger Komet
+            Color(0.95, 0.45, 0.0, 0.55)
+            Line(points=pts, width=dp(15), joint="round", cap="round")
+            Color(1.0, 0.72, 0.05, 0.9)
+            Line(points=pts, width=dp(10), joint="round", cap="round")
+            Color(1.0, 0.92, 0.45, 0.8)
+            Line(points=pts, width=dp(3.5), joint="round", cap="round")
 
     def _blink(self, dt):
         self.phase = not self.phase
@@ -564,7 +580,8 @@ class TitleBar(BoxLayout):
 
     def __init__(self, text, **kw):
         super().__init__(**kw)
-        self.add_widget(Label(text=text, font_size=sp(24), bold=True, color=(0.28, 0.02, 0.06, 1)))
+        self.add_widget(Label(text=text, font_size=sp(25), bold=True, color=(1.0, 0.82, 0.10, 1),
+                              outline_width=2.5, outline_color=(0.10, 0.32, 0.75, 1)))
         self._shine = None
         self._t = 0.0
         self._dots = []
@@ -599,14 +616,13 @@ class TitleBar(BoxLayout):
         with self.canvas.before:
             Color(0, 0, 0, 0.55)
             RoundedRectangle(pos=(x, y + h * 0.02), size=(w, h * 0.88), radius=[h * 0.30])
-            Color(1, 1, 1, 1)
-            RoundedRectangle(pos=(x, y + h * 0.08), size=(w, h * 0.84), radius=[h * 0.30],
-                             texture=metal_texture(GOLD, 1.0))
-            Color(1, 1, 1, 0.65)
-            Line(rounded_rectangle=(x + 0.5, y + h * 0.08, w - 1, h * 0.84, h * 0.30), width=dp(1))
+            Color(0.03, 0.03, 0.05, 1)
+            RoundedRectangle(pos=(x, y + h * 0.08), size=(w, h * 0.84), radius=[h * 0.30])
+            Color(0.80, 0.68, 0.42, 1)
+            Line(rounded_rectangle=(x + 0.5, y + h * 0.08, w - 1, h * 0.84, h * 0.30), width=dp(2))
             for cx, suit in ((x + h * 0.75, 0), (x + h * 1.35, 1),
                              (x + w - h * 1.35, 2), (x + w - h * 0.75, 3)):
-                Color(*((0.75, 0.02, 0.10, 1) if suit < 2 else (0.25, 0.02, 0.06, 1)))
+                Color(*((0.95, 0.12, 0.15, 1) if suit < 2 else (0.92, 0.92, 0.95, 1)))
                 draw_suit(suit, cx, y + h / 2 + dp(1), h * 0.42)
         self._dots = []
         d = dp(5.2)
@@ -615,7 +631,7 @@ class TitleBar(BoxLayout):
                 col = Color(1.0, 0.97, 0.80, 0.2)
                 el = Ellipse(pos=(px_ - d / 2, py_ - d / 2), size=(d, d))
                 self._dots.append((col, el))
-            Color(1, 1, 1, 0.38)
+            Color(1, 1, 1, 0.14)
             self._shine = Quad(points=[0, 0, 0, 0, 0, 0, 0, 0])
         self._move()
 
@@ -691,10 +707,13 @@ class Machine(BoxLayout):
                 self._bgimg = Rectangle(texture=tex, pos=self.pos, size=self.size)
             else:
                 self._bgimg = None
-            Color(1.0, 0.78, 0.22, 1)
+            Color(0.80, 0.68, 0.42, 1)
             self._frame = Line(rounded_rectangle=(0, 0, 10, 10, 10), width=dp(6))
-            Color(1.0, 0.93, 0.68, 1)
+            Color(0.97, 0.90, 0.68, 1)
             self._frame2 = Line(rounded_rectangle=(0, 0, 10, 10, 8), width=dp(1))
+        with self.canvas.before:
+            Color(0.08, 0.36, 0.85, 1)
+            self._blue = RoundedRectangle(pos=(0, 0), size=(10, 10), radius=[dp(6)])
         with self.canvas.after:
             self._flash_color = Color(1, 1, 1, 0)
             self._flash_rect = Rectangle(pos=self.pos, size=self.size)
@@ -718,7 +737,7 @@ class Machine(BoxLayout):
         self.add_widget(top)
 
         self.add_widget(TitleBar("POKERHERZ", size_hint_y=None, height=dp(44)))
-        self.ladder = LadderBar(size_hint_y=None, height=dp(128))
+        self.ladder = LadderBar(size_hint_y=None, height=dp(150))
         self.add_widget(self.ladder)
 
         self.msg = Label(text="", font_size=sp(15), color=(0.95, 0.95, 0.85, 1),
@@ -732,7 +751,7 @@ class Machine(BoxLayout):
             Color(1, 1, 1, 1)
             self._win_out = RoundedRectangle(pos=window.pos, size=window.size, radius=[dp(12)],
                                              texture=metal_texture(GOLD, 1.0))
-            Color(0.07, 0.07, 0.10, 1)
+            Color(0.80, 0.82, 0.86, 1)
             self._win_bg = RoundedRectangle(pos=window.pos, size=window.size, radius=[dp(9)])
 
         def upd(*_):
@@ -798,6 +817,8 @@ class Machine(BoxLayout):
         self._frame.rounded_rectangle = (x + dp(3), y + dp(3), w - dp(6), h - dp(6), dp(14))
         self._frame2.rounded_rectangle = (x + dp(8), y + dp(8), w - dp(16), h - dp(16), dp(10))
         self._flash_rect.pos, self._flash_rect.size = self.pos, self.size
+        self._blue.pos = (x + dp(10), y + h - dp(14) - dp(66))
+        self._blue.size = (w - dp(20), dp(70))
         for col, el in self._fdots:
             self.canvas.after.remove(col)
             self.canvas.after.remove(el)
