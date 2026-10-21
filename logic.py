@@ -29,7 +29,7 @@ PAY = dict(PAYTABLE)
 # Risikoleiter: nach jedem richtigen Tipp verdoppelt sich der Gewinn
 LADDER = [1, 2, 4, 8, 16, 32, 64]
 # Risiko-Lauflicht: gleich grosse Felder, im Wechsel NULL und die echte Vermehrung (x2).
-RISK_CELLS = [0, 2, 0, 2, 0, 2, 0, 2]
+RISK_CELLS = [0, 2]
 STAKES = [5, 10, 20, 50]
 START_CREDIT = 200
 

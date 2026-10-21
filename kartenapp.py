@@ -25,10 +25,11 @@ from kivy.uix.gridlayout import GridLayout
 from kivy.uix.label import Label
 from kivy.uix.widget import Widget
 
-from logic import LADDER, PAYTABLE, RANKS, RISK_CELLS, SUITS, Game
+from logic import LADDER, PAYTABLE, RANKS, SUITS, Game
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BG = (0.07, 0.08, 0.10, 1)
+BG = (0.03, 0.03, 0.04, 1)
+CREAM = (0.94, 0.83, 0.64, 1)
 GOLD = (0.96, 0.80, 0.42, 1)
 NEON = GOLD
 RED = (0.82, 0.10, 0.14, 1)
@@ -180,9 +181,9 @@ class LedDisplay(Widget):
         y0, y1 = y + h * 0.17, y + h * 0.83
         ym = (y0 + y1) / 2
         with self.canvas:
-            Color(0.03, 0.02, 0.03, 1)
+            Color(0.10, 0.01, 0.01, 1)
             RoundedRectangle(pos=self.pos, size=self.size, radius=[dp(5)])
-            Color(0.85, 0.65, 0.2, 0.9)
+            Color(0.80, 0.64, 0.28, 1)
             Line(rounded_rectangle=(x, y, w, h, dp(5)), width=dp(1))
             for i, ch in enumerate(text):
                 x0, x1 = x + i * cw + m, x + (i + 1) * cw - m
@@ -194,11 +195,11 @@ class LedDisplay(Widget):
                 lit = SEGMENTS.get(ch, "")
                 for name, pts in segs.items():
                     if name in lit:
-                        Color(1.0, 0.75, 0.15, 0.25)
+                        Color(1.0, 0.15, 0.05, 0.25)
                         Line(points=pts, width=th * 2.3, cap="round")
-                        Color(1.0, 0.86, 0.40, 1)
+                        Color(1.0, 0.28, 0.14, 1)
                     else:
-                        Color(0.16, 0.12, 0.05, 1)
+                        Color(0.20, 0.03, 0.03, 1)
                     Line(points=pts, width=th, cap="round")
 
 
@@ -284,19 +285,24 @@ class HeartCell(Widget):
         s = min(w / 1.12, h / 1.15)
         cx, cy = x + w / 2, y + h / 2 + h * 0.06
         with self.canvas:
+            if self.state == "active" and self.glow:
+                Color(1, 0.75, 0.2, 0.35)
+                draw_suit(0, cx, cy, s * 1.35)
+            Color(0.40, 0.25, 0.12, 1)
+            draw_suit(0, cx, cy - dp(1), s * 1.04)
+            Color(*CREAM)                              # cremefarbener Rand
+            draw_suit(0, cx, cy, s)
             if self.state == "active":
-                Color(GOLD[0], GOLD[1], GOLD[2], 0.40 if self.glow else 0.18)
-                draw_suit(0, cx, cy, s * 1.3)
-                Color(*GOLD)
+                Color(1.0, 0.85, 0.30, 1) if self.glow else Color(1.0, 0.45, 0.15, 1)
                 tcol = INK
             elif self.state == "passed":
-                Color(0.85, 0.12, 0.18, 1)
+                Color(0.90, 0.12, 0.10, 1)
                 tcol = (1, 1, 1, 1)
             else:
-                Color(0.62, 0.20, 0.34, 1)
-                tcol = (1, 0.88, 0.9, 1)
-            draw_suit(0, cx, cy, s)
-            tex = text_texture(self.label, sp(10.5), tcol)
+                Color(0.62, 0.14, 0.10, 1)
+                tcol = (1, 0.92, 0.80, 1)
+            draw_suit(0, cx, cy, s * 0.80)
+            tex = text_texture(self.label, sp(10), tcol)
             Color(1, 1, 1, 1)
             Rectangle(texture=tex, size=tex.size,
                       pos=(cx - tex.width / 2, cy - tex.height / 2 - h * 0.05))
@@ -330,77 +336,77 @@ class LadderBar(BoxLayout):
 
 
 # ----------------------------------------------- Risiko: Null oder mehr ----
-class RiskTrack(Widget):
-    """Lauflicht-Leiste: links NULL, nach rechts waechst die Vermehrung (x2, ganz rechts x4)."""
-    cells = len(RISK_CELLS)
+class Lamp(Widget):
+    """Beschriftete Signallampe (NULL / MEHR)."""
 
-    def __init__(self, **kw):
+    def __init__(self, text, color, **kw):
         super().__init__(**kw)
-        self.runner = -1
-        self.result = None          # None, "more" oder "zero" (Endergebnis)
-        self.blink = False
+        self.text, self.color, self.on = text, color, False
         self.bind(pos=self.redraw, size=self.redraw)
 
-    def reset(self):
-        self.runner, self.result = -1, None
-        self.redraw()
-
-    def set_runner(self, i, blink=False):
-        self.runner, self.blink = i, blink
-        self.redraw()
-
-    def set_result(self, i, more):
-        self.runner, self.result, self.blink = i, "more" if more else "zero", False
-        self.redraw()
+    def set(self, on):
+        if on != self.on:
+            self.on = on
+            self.redraw()
 
     def redraw(self, *_):
         self.canvas.clear()
         x, y = self.pos
         w, h = self.size
-        gap = dp(5)
-        cw = (w - gap * (self.cells - 1)) / self.cells
+        c = self.color
+        k = 1.0 if self.on else 0.28
         with self.canvas:
-            for i in range(self.cells):
-                cx = x + i * (cw + gap)
-                zero = RISK_CELLS[i] == 0
-                base = (0.78, 0.09, 0.15, 1) if zero else (0.96, 0.80, 0.42, 1)
-                tcol = (1, 0.9, 0.9, 1) if zero else INK
-                label = "NULL" if zero else "x2"
-                lit = i == self.runner
-                if lit:
-                    if self.result == "more":
-                        glow, base = (1.0, 0.9, 0.4), (1.0, 0.95, 0.60, 1)
-                    elif self.result == "zero":
-                        glow, base = (1.0, 0.3, 0.3), (1.0, 0.35, 0.35, 1)
-                    else:
-                        glow, base = (1.0, 1.0, 0.9), (1.0, 1.0, 0.95, 1)
-                        if self.blink:
-                            glow, base = (1.0, 0.8, 0.4), (1.0, 0.92, 0.7, 1)
-                    Color(glow[0], glow[1], glow[2], 0.40)
-                    RoundedRectangle(pos=(cx - dp(3), y - dp(5)), size=(cw + dp(6), h + dp(10)),
-                                     radius=[dp(10)])
-                    tcol = INK
-                Color(0, 0, 0, 0.5)
-                RoundedRectangle(pos=(cx, y - dp(2)), size=(cw, h), radius=[dp(8)])
-                Color(1, 1, 1, 1)
-                RoundedRectangle(pos=(cx, y), size=(cw, h), radius=[dp(8)],
-                                 texture=metal_texture(base, 1.0))
-                Color(1, 1, 1, 0.5)
-                Line(rounded_rectangle=(cx + dp(0.5), y + dp(0.5), cw - dp(1), h - dp(1), dp(8)),
-                     width=dp(1))
-                tex = text_texture(label, sp(13), tcol)
-                Color(1, 1, 1, 1)
-                Rectangle(texture=tex, size=tex.size,
-                          pos=(cx + (cw - tex.width) / 2, y + (h - tex.height) / 2))
+            Color(0, 0, 0, 0.6)
+            RoundedRectangle(pos=(x, y - dp(2)), size=(w, h), radius=[dp(10)])
+            Color(1, 1, 1, 1)
+            RoundedRectangle(pos=(x, y), size=(w, h), radius=[dp(10)],
+                             texture=metal_texture(c, k))
+            if self.on:
+                Color(c[0], c[1], c[2], 0.35)
+                RoundedRectangle(pos=(x - dp(4), y - dp(4)), size=(w + dp(8), h + dp(8)),
+                                 radius=[dp(13)])
+            Color(1, 1, 1, 0.5 if self.on else 0.15)
+            Line(rounded_rectangle=(x + 0.5, y + 0.5, w - 1, h - 1, dp(10)), width=dp(1))
+            tex = text_texture(self.text, sp(15), (1, 1, 1, 1) if self.on else (0.7, 0.6, 0.55, 1))
+            Color(1, 1, 1, 1)
+            Rectangle(texture=tex, size=tex.size,
+                      pos=(x + (w - tex.width) / 2, y + (h - tex.height) / 2))
+
+
+class RiskFlip(BoxLayout):
+    """Wie beim echten Automaten: eine Anzeige springt zwischen 0 und dem doppelten Gewinn."""
+
+    def __init__(self, **kw):
+        super().__init__(orientation="horizontal", spacing=dp(8), **kw)
+        self.lamp_null = Lamp("NULL", (0.80, 0.10, 0.12, 1), size_hint_x=0.26)
+        self.led = LedDisplay(digits=5)
+        self.lamp_more = Lamp("MEHR", (0.95, 0.72, 0.18, 1), size_hint_x=0.26)
+        for w in (self.lamp_null, self.led, self.lamp_more):
+            self.add_widget(w)
+        self.reset()
+
+    def reset(self):
+        self.led.set("")
+        self.lamp_null.set(False)
+        self.lamp_more.set(False)
+
+    def show(self, side, text):
+        """side 0 = NULL wird angezeigt, 1 = MEHR (der doppelte Gewinn)."""
+        self.led.set(text)
+        self.lamp_null.set(side == 0)
+        self.lamp_more.set(side == 1)
+
+    def blank(self):
+        self.led.set("")
 
 
 class RiskPanel(BoxLayout):
     def __init__(self, **kw):
-        super().__init__(orientation="vertical", spacing=dp(6), **kw)
+        super().__init__(orientation="vertical", spacing=dp(8), **kw)
         self.info = Label(text="", font_size=sp(16), bold=True, color=GOLD,
                           size_hint_y=None, height=dp(30))
-        self.track = RiskTrack(size_hint_y=None, height=dp(56))
-        self.hint = Label(text="", font_size=sp(13), color=(0.8, 0.85, 0.9, 1),
+        self.track = RiskFlip(size_hint_y=None, height=dp(84))
+        self.hint = Label(text="", font_size=sp(13), color=(0.85, 0.85, 0.8, 1),
                           size_hint_y=None, height=dp(28))
         self.add_widget(Widget())
         self.add_widget(self.info)
@@ -486,8 +492,8 @@ class GlossButton(Button):
 class TitleBar(BoxLayout):
     def __init__(self, text, **kw):
         super().__init__(**kw)
-        self.add_widget(Label(text=text, font_size=sp(24), bold=True, color=NEON,
-                              outline_width=0, outline_color=(0, 0, 0, 0)))
+        self.add_widget(Label(text=text, font_size=sp(24), bold=True, color=(1, 1, 1, 1),
+                              outline_width=2.5, outline_color=(0.10, 0.38, 0.80, 1)))
         self.bind(pos=self.redraw, size=self.redraw)
 
     def redraw(self, *_):
@@ -495,13 +501,13 @@ class TitleBar(BoxLayout):
         x, y = self.pos
         w, h = self.size
         with self.canvas.before:
-            Color(0.10, 0.11, 0.14, 0.95)
+            Color(0.04, 0.04, 0.06, 0.92)
             RoundedRectangle(pos=(x, y + h * 0.08), size=(w, h * 0.84), radius=[dp(8)])
-            Color(*NEON)
+            Color(0.80, 0.64, 0.28, 1)
             Line(rounded_rectangle=(x, y + h * 0.08, w, h * 0.84, dp(8)), width=dp(1.5))
             for cx, suit in ((x + h * 0.75, 0), (x + h * 1.35, 1),
                              (x + w - h * 1.35, 2), (x + w - h * 0.75, 3)):
-                Color(*(RED if suit < 2 else NEON))
+                Color(*((0.95, 0.45, 0.10, 1) if suit < 2 else CREAM))
                 draw_suit(suit, cx, y + h / 2 + dp(1), h * 0.42)
 
 
@@ -529,7 +535,7 @@ class PayRow(BoxLayout):
     def redraw(self, *_):
         self.canvas.before.clear()
         with self.canvas.before:
-            Color(*(GOLD if self.lit else (1, 1, 1, 0.13)))
+            Color(*(GOLD if self.lit else (0.14, 0.32, 0.62, 0.85)))
             RoundedRectangle(pos=(self.x + dp(1), self.y + dp(1)),
                              size=(self.width - dp(2), self.height - dp(2)), radius=[dp(6)])
 
@@ -572,9 +578,9 @@ class Machine(BoxLayout):
                 self._bgimg = Rectangle(texture=tex, pos=self.pos, size=self.size)
             else:
                 self._bgimg = None
-            Color(*NEON)
-            self._frame = Line(rounded_rectangle=(0, 0, 10, 10, 10), width=dp(3))
-            Color(1, 1, 1, 0.25)
+            Color(0.78, 0.62, 0.25, 1)
+            self._frame = Line(rounded_rectangle=(0, 0, 10, 10, 10), width=dp(6))
+            Color(1.0, 0.93, 0.68, 1)
             self._frame2 = Line(rounded_rectangle=(0, 0, 10, 10, 8), width=dp(1))
         with self.canvas.after:
             self._flash_color = Color(1, 1, 1, 0)
@@ -607,9 +613,9 @@ class Machine(BoxLayout):
         window = BoxLayout(spacing=dp(6), padding=[dp(8), dp(8)], size_hint_y=None,
                            height=dp(118))
         with window.canvas.before:
-            Color(0.10, 0.11, 0.14, 0.95)
+            Color(0.95, 0.92, 0.82, 1)
             self._win_bg = RoundedRectangle(pos=window.pos, size=window.size, radius=[dp(10)])
-            Color(*NEON)
+            Color(0.78, 0.62, 0.25, 1)
             self._win_line = Line(rounded_rectangle=(0, 0, 10, 10, 10), width=dp(2))
 
         def upd(*_):
@@ -640,9 +646,9 @@ class Machine(BoxLayout):
 
         # Steuerung
         row1 = BoxLayout(spacing=dp(8), size_hint_y=None, height=dp(44))
-        self.btn_minus = GlossButton("Einsatz -", (0.40, 0.43, 0.50, 1), 15)
-        self.btn_plus = GlossButton("Einsatz +", (0.40, 0.43, 0.50, 1), 15)
-        self.btn_sound = GlossButton("Ton an", (0.40, 0.43, 0.50, 1), 15)
+        self.btn_minus = GlossButton("Einsatz -", (0.14, 0.34, 0.66, 1), 15)
+        self.btn_plus = GlossButton("Einsatz +", (0.14, 0.34, 0.66, 1), 15)
+        self.btn_sound = GlossButton("Ton an", (0.14, 0.34, 0.66, 1), 15)
         self.btn_minus.bind(on_release=lambda *_: self.on_stake(-1))
         self.btn_plus.bind(on_release=lambda *_: self.on_stake(1))
         self.btn_sound.bind(on_release=lambda *_: self.on_sound())
@@ -780,7 +786,7 @@ class Machine(BoxLayout):
 
         Clock.schedule_interval(step, 0.06)
 
-    # --- Risiko: Lauflicht selbst stoppen ----------------------------------
+    # --- Risiko: Anzeige springt zwischen 0 und dem doppelten Gewinn --------
     def on_risk(self):
         g = self.game
         if self.running:
@@ -793,33 +799,27 @@ class Machine(BoxLayout):
         self.frozen = {"win": g.win, "rung": g.rung, "credit": g.credit}
         panel, track = self.risk_panel, self.risk_panel.track
         track.reset()
-        self.msg.text = "Stoppe das Licht auf der Gewinnseite!"
+        self.msg.text = "Stoppe die Anzeige auf dem Gewinn!"
         self.refresh()
         panel.info.text = "STOPP druecken!"
-        panel.hint.text = "NULL oder die andere Seite - je hoeher, desto schneller"
+        panel.hint.text = "Risiko 1:1 - je hoeher die Stufe, desto schneller"
         self.sfx.play("risk_start")
         Clock.schedule_once(lambda dt: self.running and self.sfx.play("risk_loop", 0.8, loop=True), 0.5)
-        n = RiskTrack.cells
-        self._pos = random.randrange(n)
-        self._dir = random.choice((-1, 1))
-        speed = max(0.028, 0.10 * 0.78 ** g.rung)
-
-        def advance():
-            nxt = self._pos + self._dir
-            if nxt < 0 or nxt >= n:
-                self._dir = -self._dir
-                nxt = self._pos + self._dir
-            self._pos = nxt
+        self._more_text = str(g.win * 2)
+        self._pos = random.randrange(2)
+        speed = max(0.04, 0.16 * 0.80 ** g.rung)
+        count = {"n": 0}
 
         def run(dt):
             if not self.running:
                 return
-            advance()
-            track.set_runner(self._pos)
-            self.sfx.play("risk_tick_hi" if RISK_CELLS[self._pos] else "risk_tick_lo", 0.45)
+            self._pos = 1 - self._pos
+            track.show(self._pos, self._more_text if self._pos else "0")
+            count["n"] += 1
+            if speed > 0.07 or count["n"] % 2 == 0:
+                self.sfx.play("risk_tick_hi" if self._pos else "risk_tick_lo", 0.4)
             self._ev = Clock.schedule_once(run, speed)
 
-        self._advance = advance
         self._ev = Clock.schedule_once(run, speed)
 
     def on_stop(self):
@@ -832,36 +832,30 @@ class Machine(BoxLayout):
         panel, track = self.risk_panel, self.risk_panel.track
         self.sfx.stop("risk_loop")
         self.sfx.play("risk_stop")
-        panel.info.text = "Das Licht laeuft aus ..."
+        self.sfx.play("risk_hold")
+        panel.info.text = "Und ...?"
         self.refresh()
-
-        def coast(i):
-            self._advance()
-            track.set_runner(self._pos)
-            self.sfx.play("risk_tick_hi" if RISK_CELLS[self._pos] else "risk_tick_lo", 0.7)
-            if i + 1 < 3:
-                Clock.schedule_once(lambda dt: coast(i + 1), 0.12 + 0.16 * (i + 1))
-            else:
-                self.sfx.play("risk_hold")
-                panel.info.text = "Und ...?"
-                blink(0)
+        side = self._pos
+        text = self._more_text if side else "0"
 
         def blink(k):
-            track.set_runner(self._pos, blink=(k % 2 == 0))
             if k % 2 == 0:
+                track.show(side, text)
                 self.sfx.play("heart", 0.8)
-            if k >= 5:
+            else:
+                track.blank()
+            if k >= 6:
                 reveal()
             else:
-                Clock.schedule_once(lambda dt: blink(k + 1), 0.28)
+                Clock.schedule_once(lambda dt: blink(k + 1), 0.26)
 
         def reveal():
-            mult = g.risk_resolve(self._pos)
-            track.set_result(self._pos, bool(mult))
+            mult = g.risk_resolve(side)
+            track.show(side, text)
             self.msg.text = g.message
             if mult:
                 self.sfx.play("risk_win")
-                self.flash((0.4, 1.0, 0.5))
+                self.flash((1.0, 0.85, 0.4))
                 panel.info.text = "MEHR x%d!" % mult
             else:
                 self.sfx.play("risk_lose")
@@ -875,7 +869,7 @@ class Machine(BoxLayout):
             self._save()
             self.refresh()
 
-        Clock.schedule_once(lambda dt: coast(0), 0.15)
+        Clock.schedule_once(lambda dt: blink(0), 0.2)
 
     # --- Anzeige ----------------------------------------------------------
     def refresh(self):
@@ -905,7 +899,7 @@ class Machine(BoxLayout):
                 self.risk_panel.track.reset()
         if in_risk and not self.frozen:
             self.risk_panel.info.text = "Gewinn %d  -  RISIKO oder NEHMEN" % g.win
-            self.risk_panel.hint.text = "Du stoppst das Licht selbst: NULL oder die andere Seite"
+            self.risk_panel.hint.text = "Risiko 1:1: die Anzeige springt zwischen 0 und dem Doppelten"
 
         self.btn_risk.disabled = (bool(self.frozen) and not self.running) or (
             not self.frozen and g.state not in ("result", "risk"))

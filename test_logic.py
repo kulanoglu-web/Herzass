@@ -67,12 +67,12 @@ class GameTest(unittest.TestCase):
     def test_risk_mehr(self):
         g = Game(credit=100, stake=10)
         g.state, g.win = "result", 20
-        self.assertEqual(g.risk_resolve(5), 2)
+        self.assertEqual(g.risk_resolve(1), 2)
         self.assertEqual((g.win, g.state, g.rung), (40, "risk", 1))
 
     def test_risk_nicht_moeglich(self):
         g = Game()
-        self.assertIsNone(g.risk_resolve(5))
+        self.assertIsNone(g.risk_resolve(1))
         self.assertFalse(g.risk_start())
 
     def test_top_rung_pays_out(self):
