@@ -6,7 +6,7 @@ source.dir = .
 source.include_exts = py,png,jpg,json
 source.exclude_dirs = hello,hello221,.github,bin,.buildozer
 version = 0.1
-requirements = python3,kivy==2.3.1
+requirements = python3,kivy==2.2.1
 orientation = portrait
 fullscreen = 0
 android.archs = arm64-v8a

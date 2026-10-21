@@ -15,8 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: game,     dir: ".",      branch: apk-build,    cython: "3.0.11" }
-          - { name: hello,    dir: hello,    branch: apk-hello,    cython: "3.0.11" }
+          - { name: game,     dir: ".",      branch: apk-build,    cython: "0.29.36" }
           - { name: hello221, dir: hello221, branch: apk-hello221, cython: "0.29.36" }
     steps:
       - uses: actions/checkout@v4
